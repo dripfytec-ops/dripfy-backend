@@ -1,0 +1,179 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  admin_master
+  lojista_admin
+  atendente
+}
+
+enum LeadStatus {
+  balde_geral
+  aguardando_resposta
+  em_atendimento
+  finalizado
+}
+
+enum CampaignStatus {
+  pausado
+  rodando
+  concluido
+}
+
+enum SubscriptionStatus {
+  ativo
+  inativo
+  trial
+}
+
+enum MessageStatus {
+  enviado
+  entregue
+  lido
+  erro
+}
+
+model Tenant {
+  id                  String             @id @default(uuid())
+  nome_empresa        String
+  slug                String             @unique
+  status_assinatura   SubscriptionStatus @default(trial)
+  criado_em           DateTime           @default(now())
+  atualizado_em       DateTime           @updatedAt
+
+  users               User[]
+  canais              Canal[]
+  chatwoot_config     ChatwootConfig?
+  leads               Lead[]
+  campanhas           CampanhaFila[]
+  messages            Message[]
+
+  @@map("tenants")
+}
+
+model User {
+  id            String    @id @default(uuid())
+  tenant_id     String
+  nome          String
+  email         String
+  password_hash String
+  role          UserRole  @default(atendente)
+  ativo         Boolean   @default(true)
+  criado_em     DateTime  @default(now())
+  atualizado_em DateTime  @updatedAt
+
+  tenant        Tenant    @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  @@unique([tenant_id, email])
+  @@map("users")
+}
+
+model Canal {
+  id                    String   @id @default(uuid())
+  tenant_id             String
+  nome                  String
+  phone_number_id       String
+  waba_id               String
+  meta_access_token     String
+  template_boas_vindas  String?
+  chatwoot_inbox_id     Int?
+  ativo                 Boolean  @default(true)
+  criado_em             DateTime @default(now())
+  atualizado_em         DateTime @updatedAt
+
+  tenant                Tenant         @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  campanhas             CampanhaFila[]
+  messages              Message[]
+
+  @@index([tenant_id])
+  @@index([tenant_id, phone_number_id])
+  @@map("canais")
+}
+
+model ChatwootConfig {
+  id                  String   @id @default(uuid())
+  tenant_id           String   @unique
+  chatwoot_url        String
+  chatwoot_api_token  String
+  criado_em           DateTime @default(now())
+  atualizado_em       DateTime @updatedAt
+
+  tenant              Tenant   @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  @@map("chatwoot_configs")
+}
+
+model Lead {
+  id_number     Int        @id @default(autoincrement())
+  id_uuid       String     @default(uuid())
+  tenant_id     String
+  cpf           String?
+  nome          String
+  telefone      String
+  status_atual  LeadStatus @default(balde_geral)
+  disparado     Boolean    @default(false)
+  campanha_id   String?
+  criado_em     DateTime   @default(now())
+  atualizado_em DateTime   @updatedAt
+
+  tenant        Tenant        @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  campanha      CampanhaFila? @relation(fields: [campanha_id], references: [id])
+  messages      Message[]
+
+  @@unique([tenant_id, cpf])
+  @@index([tenant_id, status_atual])
+  @@index([tenant_id, disparado])
+  @@map("leads")
+}
+
+model CampanhaFila {
+  id              String         @id @default(uuid())
+  tenant_id       String
+  canal_id        String?
+  nome_campanha   String
+  template_name   String
+  template_params Json?
+  delay_segundos  Int            @default(60)
+  status          CampaignStatus @default(pausado)
+  total_leads     Int            @default(0)
+  enviados        Int            @default(0)
+  erros           Int            @default(0)
+  criado_em       DateTime       @default(now())
+  atualizado_em   DateTime       @updatedAt
+
+  tenant          Tenant         @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  canal           Canal?         @relation(fields: [canal_id], references: [id], onDelete: SetNull)
+  leads           Lead[]
+
+  @@index([tenant_id, status])
+  @@map("campanhas_filas")
+}
+
+model Message {
+  id            String        @id @default(uuid())
+  tenant_id     String
+  canal_id      String?
+  lead_id       Int
+  campanha_id   String?
+  wamid         String?       @unique
+  template_name String
+  status        MessageStatus @default(enviado)
+  erro_msg      String?
+  criado_em     DateTime      @default(now())
+  atualizado_em DateTime      @updatedAt
+
+  tenant        Tenant        @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  canal         Canal?        @relation(fields: [canal_id], references: [id], onDelete: SetNull)
+  lead          Lead          @relation(fields: [lead_id], references: [id_number], onDelete: Cascade)
+
+  @@index([lead_id])
+  @@index([tenant_id])
+  @@index([wamid])
+  @@map("messages")
+}
