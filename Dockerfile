@@ -10,7 +10,8 @@ RUN npm ci
 COPY . .
 
 RUN npx prisma generate
-RUN npm run build
+RUN ./node_modules/.bin/nest build
+RUN ls -la dist/ && echo "BUILD OK"
 
 ENV NODE_ENV=production
 
