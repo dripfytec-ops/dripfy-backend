@@ -11,7 +11,7 @@ COPY . .
 
 RUN npx prisma generate
 RUN ./node_modules/.bin/nest build
-RUN ls -la dist/ && echo "BUILD OK"
+RUN ls -la dist/ && test -f dist/main.js && echo "BUILD OK - main.js EXISTS" || (echo "BUILD FAILED - dist/main.js MISSING" && exit 1)
 
 ENV NODE_ENV=production
 

@@ -20,18 +20,6 @@ async function bootstrap() {
     credentials: true,
   });
 
-  if (process.env.NODE_ENV !== 'production') {
-    const { DocumentBuilder, SwaggerModule } = await import('@nestjs/swagger');
-    const swaggerConfig = new DocumentBuilder()
-      .setTitle('Dripfy API')
-      .setDescription('SaaS Multi-tenant WhatsApp Drip Campaign')
-      .setVersion('1.0')
-      .addBearerAuth()
-      .build();
-    const document = SwaggerModule.createDocument(app, swaggerConfig);
-    SwaggerModule.setup('api/docs', app, document);
-  }
-
   const port = process.env.PORT || 3001;
   await app.listen(port);
   console.log(`Dripfy API rodando na porta ${port}`);
