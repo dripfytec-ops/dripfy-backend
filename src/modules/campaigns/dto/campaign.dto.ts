@@ -1,4 +1,4 @@
-import { IsString, IsInt, Min, IsOptional, IsObject } from 'class-validator';
+import { IsString, IsInt, Min, IsOptional, IsObject, IsUrl } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateCampaignDto {
@@ -18,6 +18,11 @@ export class CreateCampaignDto {
   @IsOptional()
   @IsObject()
   template_params?: Record<string, any>;
+
+  @ApiPropertyOptional({ description: 'URL permanente da imagem para templates com header IMAGE' })
+  @IsOptional()
+  @IsUrl()
+  image_url?: string;
 
   @ApiProperty({ example: 60, description: 'Delay em segundos entre cada disparo' })
   @IsInt()

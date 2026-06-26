@@ -9,7 +9,31 @@ export class WebhookController {
 
   constructor(private readonly webhookService: WebhookService) {}
 
-  // Verificação do webhook pela Meta
+  // Verificação global do webhook pela Meta (sem slug — recomendado para multi-tenant)
+  @Get('meta')
+  @ApiOperation({ summary: 'Verificação do Webhook Meta global (GET)' })
+  verifyMetaGlobal(
+    @Query('hub.mode') mode: string,
+    @Query('hub.verify_token') token: string,
+    @Query('hub.challenge') challenge: string,
+  ) {
+    if (mode === 'subscribe' && token === process.env.META_WEBHOOK_VERIFY_TOKEN) {
+      this.logger.log('Webhook Meta global verificado.');
+      return challenge;
+    }
+    return { status: 'forbidden' };
+  }
+
+  // Recebimento global de eventos Meta (identifica tenant pelo phone_number_id)
+  @Post('meta')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Recebe eventos do Webhook Meta global (POST)' })
+  async receiveMetaGlobal(@Body() body: any) {
+    await this.webhookService.processMetaGlobal(body);
+    return { status: 'ok' };
+  }
+
+  // Verificação do webhook pela Meta (com slug — mantido para compatibilidade)
   @Get('meta/:tenantSlug')
   @ApiOperation({ summary: 'Verificação do Webhook Meta (GET)' })
   verifyMeta(
@@ -25,7 +49,7 @@ export class WebhookController {
     return { status: 'forbidden' };
   }
 
-  // Recebimento de mensagens via webhook Meta
+  // Recebimento de mensagens via webhook Meta (com slug — mantido para compatibilidade)
   @Post('meta/:tenantSlug')
   @HttpCode(200)
   @ApiOperation({ summary: 'Recebe eventos do Webhook Meta (POST)' })

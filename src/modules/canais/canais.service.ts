@@ -63,6 +63,12 @@ export class CanaisService {
     });
   }
 
+  async findByPhoneNumberIdGlobal(phoneNumberId: string) {
+    return this.prisma.canal.findFirst({
+      where: { phone_number_id: phoneNumberId, ativo: true },
+    });
+  }
+
   async findFirstActive(tenantId: string) {
     return this.prisma.canal.findFirst({
       where: { tenant_id: tenantId, ativo: true },

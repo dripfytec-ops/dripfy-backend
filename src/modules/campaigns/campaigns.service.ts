@@ -24,6 +24,7 @@ export class CampaignsService {
         nome_campanha: dto.nome_campanha,
         template_name: dto.template_name,
         template_params: dto.template_params || {},
+        image_url: dto.image_url || null,
         delay_segundos: dto.delay_segundos,
         status: CampaignStatus.pausado,
       },
@@ -78,6 +79,7 @@ export class CampaignsService {
           accessToken: campanha.canal!.meta_access_token,
           templateName: campanha.template_name,
           templateParams: campanha.template_params as Record<string, any>,
+          imageUrl: campanha.image_url || undefined,
           telefone: lead.telefone,
           nome: lead.nome,
         });
@@ -100,7 +102,7 @@ export class CampaignsService {
   private async dispatchLead(data: {
     leadId: number; tenantId: string; campanhaId: string; canalId: string;
     phoneNumberId: string; wabaId: string; accessToken: string; templateName: string;
-    templateParams?: Record<string, any>; telefone: string; nome: string;
+    templateParams?: Record<string, any>; imageUrl?: string; telefone: string; nome: string;
   }) {
     this.logger.log(`Disparando Lead #${data.leadId} → ${data.telefone} | template=${data.templateName}`);
     try {
@@ -118,21 +120,21 @@ export class CampaignsService {
       const bodyComponent = tplData?.components?.find((c: any) => c.type === 'BODY');
       const bodyText: string = bodyComponent?.text || '';
       const headerFormat: string = headerComponent?.format || '';
-      const headerImageUrl: string = headerComponent?.example?.header_handle?.[0] || '';
 
       // Se o fetch do template falhou, usa o setting da campanha como fallback
       const paramCount = tplData
         ? (bodyText.match(/\{\{\d+\}\}/g) || []).length
         : (data.templateParams?.usa_nome ? 1 : 0);
 
-      this.logger.log(`Template "${data.templateName}" → tplFetched=${!!tplData} | header=${headerFormat} | params=${paramCount} | fallback_usa_nome=${data.templateParams?.usa_nome}`);
+      this.logger.log(`Template "${data.templateName}" → tplFetched=${!!tplData} | header=${headerFormat} | params=${paramCount} | imageUrl=${!!data.imageUrl}`);
 
       const components: any[] = [];
 
-      if (headerFormat === 'IMAGE' && headerImageUrl) {
+      // Só envia header IMAGE se o usuário configurou uma URL permanente na campanha
+      if (headerFormat === 'IMAGE' && data.imageUrl) {
         components.push({
           type: 'header',
-          parameters: [{ type: 'image', image: { link: headerImageUrl } }],
+          parameters: [{ type: 'image', image: { link: data.imageUrl } }],
         });
       }
 

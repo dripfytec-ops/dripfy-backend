@@ -82,9 +82,9 @@ export class ChatwootService {
   }
 
   private async getAccountId(url: string, token: string): Promise<number> {
-    const { data } = await axios.get(`${url}/auth/sign_in`, {
+    const { data } = await axios.get(`${url}/api/v1/profile`, {
       headers: { api_access_token: token },
     });
-    return data?.data?.account_id || 1;
+    return data?.account_id || 1;
   }
 }

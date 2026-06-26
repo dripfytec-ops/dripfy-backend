@@ -140,6 +140,7 @@ model CampanhaFila {
   nome_campanha   String
   template_name   String
   template_params Json?
+  image_url       String?
   delay_segundos  Int            @default(60)
   status          CampaignStatus @default(pausado)
   total_leads     Int            @default(0)

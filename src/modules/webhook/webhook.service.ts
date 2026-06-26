@@ -65,10 +65,35 @@ export class WebhookService {
 
     const contactId = await this.chatwootService.createOrUpdateContact(tenant.id, data.nome, telefoneNorm);
     if (contactId) {
-      await this.chatwootService.createConversation(tenant.id, contactId, `Novo lead via webhook: ${data.nome}`);
+      await this.chatwootService.createConversation(
+        tenant.id,
+        contactId,
+        `Novo lead via webhook: ${data.nome}`,
+        canal?.chatwoot_inbox_id ?? undefined,
+      );
     }
 
     return { lead_id: lead.id_number, status: 'processado' };
+  }
+
+  async processMetaGlobal(body: any) {
+    const entry = body?.entry?.[0];
+    const changes = entry?.changes?.[0];
+    const phoneNumberId = changes?.value?.metadata?.phone_number_id;
+
+    if (!phoneNumberId) return;
+
+    // Identifica tenant pelo phone_number_id sem precisar do slug na URL
+    const canal = await this.canaisService.findByPhoneNumberIdGlobal(phoneNumberId);
+    if (!canal) {
+      this.logger.warn(`Webhook recebido para phoneNumberId desconhecido: ${phoneNumberId}`);
+      return;
+    }
+
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: canal.tenant_id } });
+    if (!tenant) return;
+
+    await this.processMetaPayload(tenant, canal, changes);
   }
 
   async processMeta(tenantSlug: string, body: any) {
@@ -78,12 +103,15 @@ export class WebhookService {
     const entry = body?.entry?.[0];
     const changes = entry?.changes?.[0];
 
-    // Identifica o canal pelo phone_number_id da Meta
     const phoneNumberId = changes?.value?.metadata?.phone_number_id;
     const canal = phoneNumberId
       ? await this.canaisService.findByPhoneNumberId(tenant.id, phoneNumberId)
       : await this.canaisService.findFirstActive(tenant.id);
 
+    await this.processMetaPayload(tenant, canal, changes);
+  }
+
+  private async processMetaPayload(tenant: { id: string }, canal: any, changes: any) {
     // Callbacks de status de entrega
     const statuses = changes?.value?.statuses;
     if (statuses?.length) {
@@ -97,6 +125,8 @@ export class WebhookService {
     for (const msg of messages) {
       const telefone = msg.from;
       const texto = msg.text?.body || '[mídia]';
+
+      this.logger.log(`Mensagem recebida de ${telefone} → "${texto}"`);
 
       const lead = await this.prisma.lead.findFirst({
         where: { tenant_id: tenant.id, telefone },
@@ -116,7 +146,12 @@ export class WebhookService {
       );
 
       if (contactId) {
-        await this.chatwootService.createConversation(tenant.id, contactId, texto);
+        await this.chatwootService.createConversation(
+          tenant.id,
+          contactId,
+          texto,
+          canal?.chatwoot_inbox_id ?? undefined,
+        );
       }
     }
   }
