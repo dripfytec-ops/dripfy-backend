@@ -117,11 +117,15 @@ export class CampaignsService {
       const headerComponent = tplData?.components?.find((c: any) => c.type === 'HEADER');
       const bodyComponent = tplData?.components?.find((c: any) => c.type === 'BODY');
       const bodyText: string = bodyComponent?.text || '';
-      const paramCount = (bodyText.match(/\{\{\d+\}\}/g) || []).length;
       const headerFormat: string = headerComponent?.format || '';
       const headerImageUrl: string = headerComponent?.example?.header_handle?.[0] || '';
 
-      this.logger.log(`Template "${data.templateName}" → header=${headerFormat} | body="${bodyText}" | params=${paramCount}`);
+      // Se o fetch do template falhou, usa o setting da campanha como fallback
+      const paramCount = tplData
+        ? (bodyText.match(/\{\{\d+\}\}/g) || []).length
+        : (data.templateParams?.usa_nome ? 1 : 0);
+
+      this.logger.log(`Template "${data.templateName}" → tplFetched=${!!tplData} | header=${headerFormat} | params=${paramCount} | fallback_usa_nome=${data.templateParams?.usa_nome}`);
 
       const components: any[] = [];
 
