@@ -35,13 +35,30 @@ export class UsersService {
     });
   }
 
-  async toggleActive(tenantId: string, userId: string) {
-    const user = await this.prisma.user.findFirst({ where: { id: userId, tenant_id: tenantId } });
+  async toggleActive(tenantId: string, userId: string, callerRole: string) {
+    const where = callerRole === UserRole.admin_master
+      ? { id: userId }
+      : { id: userId, tenant_id: tenantId };
+    const user = await this.prisma.user.findFirst({ where });
     if (!user) throw new NotFoundException('Usuário não encontrado.');
     return this.prisma.user.update({
       where: { id: userId },
       data: { ativo: !user.ativo },
       select: { id: true, nome: true, ativo: true },
+    });
+  }
+
+  async resetPassword(userId: string, newPassword: string, callerRole: string, callerTenantId: string) {
+    const where = callerRole === UserRole.admin_master
+      ? { id: userId }
+      : { id: userId, tenant_id: callerTenantId };
+    const user = await this.prisma.user.findFirst({ where });
+    if (!user) throw new NotFoundException('Usuário não encontrado.');
+    const password_hash = await bcrypt.hash(newPassword, 12);
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { password_hash },
+      select: { id: true, nome: true, email: true },
     });
   }
 }

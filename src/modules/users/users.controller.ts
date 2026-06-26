@@ -31,7 +31,23 @@ export class UsersController {
   @Patch(':id/toggle')
   @Roles(UserRole.admin_master, UserRole.lojista_admin)
   @ApiOperation({ summary: 'Ativa/desativa usuário' })
-  toggleActive(@Param('id') id: string, @CurrentUser('tenant_id') tenantId: string) {
-    return this.usersService.toggleActive(tenantId, id);
+  toggleActive(
+    @Param('id') id: string,
+    @CurrentUser('tenant_id') tenantId: string,
+    @CurrentUser('role') role: string,
+  ) {
+    return this.usersService.toggleActive(tenantId, id, role);
+  }
+
+  @Patch(':id/reset-password')
+  @Roles(UserRole.admin_master, UserRole.lojista_admin)
+  @ApiOperation({ summary: 'Redefine senha de um usuário' })
+  resetPassword(
+    @Param('id') id: string,
+    @Body() dto: { new_password: string },
+    @CurrentUser('role') role: string,
+    @CurrentUser('tenant_id') tenantId: string,
+  ) {
+    return this.usersService.resetPassword(id, dto.new_password, role, tenantId);
   }
 }
