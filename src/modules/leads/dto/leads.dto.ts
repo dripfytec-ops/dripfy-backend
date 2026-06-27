@@ -1,11 +1,15 @@
-import { IsString, IsOptional, IsEnum, IsBoolean } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { LeadStatus } from '@prisma/client';
+import { IsString, IsOptional } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 
-export class UpdateLeadStatusDto {
-  @ApiProperty({ enum: LeadStatus })
-  @IsEnum(LeadStatus)
-  status_atual: LeadStatus;
+export class UpdateLeadEtiquetaDto {
+  @IsString()
+  etiqueta_id: string;
+}
+
+export class AssignVendedorDto {
+  @IsOptional()
+  @IsString()
+  vendedor_id: string | null;
 }
 
 export class FilterLeadsDto {
@@ -14,10 +18,10 @@ export class FilterLeadsDto {
   @IsString()
   search?: string;
 
-  @ApiPropertyOptional({ enum: LeadStatus })
+  @ApiPropertyOptional()
   @IsOptional()
-  @IsEnum(LeadStatus)
-  status?: LeadStatus;
+  @IsString()
+  etiqueta_id?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

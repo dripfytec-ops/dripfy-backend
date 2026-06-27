@@ -5,13 +5,16 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import { LeadsService } from './leads.service';
-import { UpdateLeadStatusDto, FilterLeadsDto } from './dto/leads.dto';
+import { UpdateLeadEtiquetaDto, AssignVendedorDto, FilterLeadsDto } from './dto/leads.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { UserRole } from '@prisma/client';
 
 @ApiTags('leads')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('leads')
 export class LeadsController {
   constructor(private readonly leadsService: LeadsService) {}
@@ -19,7 +22,6 @@ export class LeadsController {
   @Post('upload')
   @UseInterceptors(FileInterceptor('file'))
   @ApiConsumes('multipart/form-data')
-  @ApiOperation({ summary: 'Upload de planilha Excel/CSV de leads' })
   upload(
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser('tenant_id') tenantId: string,
@@ -29,7 +31,6 @@ export class LeadsController {
   }
 
   @Post('bulk')
-  @ApiOperation({ summary: 'Importa leads via colar/paste (texto separado por tab ou ponto-e-vírgula)' })
   bulk(
     @Body('text') text: string,
     @CurrentUser('tenant_id') tenantId: string,
@@ -52,33 +53,55 @@ export class LeadsController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Lista leads com filtros e paginação (Modo Planilha)' })
   findAll(
     @CurrentUser('tenant_id') tenantId: string,
+    @CurrentUser('id') userId: string,
+    @CurrentUser('role') role: string,
     @Query() filters: FilterLeadsDto,
   ) {
-    return this.leadsService.findAll(tenantId, filters);
+    return this.leadsService.findAll(tenantId, filters, userId, role);
   }
 
   @Get('stats')
-  @ApiOperation({ summary: 'Estatísticas gerais de leads e mensagens' })
   stats(@CurrentUser('tenant_id') tenantId: string) {
     return this.leadsService.getStats(tenantId);
   }
 
   @Get('kanban')
-  @ApiOperation({ summary: 'Retorna leads agrupados por status (Modo Kanban)' })
-  kanban(@CurrentUser('tenant_id') tenantId: string) {
-    return this.leadsService.findKanban(tenantId);
+  kanban(
+    @CurrentUser('tenant_id') tenantId: string,
+    @CurrentUser('id') userId: string,
+    @CurrentUser('role') role: string,
+  ) {
+    return this.leadsService.findKanban(tenantId, userId, role);
   }
 
-  @Patch(':id/status')
-  @ApiOperation({ summary: 'Atualiza status do lead (drag-and-drop Kanban)' })
-  updateStatus(
+  @Get('vendedores')
+  @Roles(UserRole.admin_master, UserRole.lojista_admin)
+  listVendedores(@CurrentUser('tenant_id') tenantId: string) {
+    return this.leadsService.listVendedores(tenantId);
+  }
+
+  @Patch(':id/etiqueta')
+  @ApiOperation({ summary: 'Atualiza etiqueta do lead (drag-and-drop / dropdown)' })
+  updateEtiqueta(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser('tenant_id') tenantId: string,
-    @Body() dto: UpdateLeadStatusDto,
+    @CurrentUser('id') userId: string,
+    @CurrentUser('role') role: string,
+    @Body() dto: UpdateLeadEtiquetaDto,
   ) {
-    return this.leadsService.updateStatus(tenantId, id, dto);
+    return this.leadsService.updateEtiqueta(tenantId, id, dto, userId, role);
+  }
+
+  @Patch(':id/vendedor')
+  @Roles(UserRole.admin_master, UserRole.lojista_admin)
+  @ApiOperation({ summary: 'Atribui vendedor ao lead' })
+  assignVendedor(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser('tenant_id') tenantId: string,
+    @Body() dto: AssignVendedorDto,
+  ) {
+    return this.leadsService.assignVendedor(tenantId, id, dto);
   }
 }

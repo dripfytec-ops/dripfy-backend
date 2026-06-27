@@ -1,8 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import * as XLSX from 'xlsx';
 import { PrismaService } from '../../prisma/prisma.service';
-import { UpdateLeadStatusDto, FilterLeadsDto } from './dto/leads.dto';
-import { LeadStatus } from '@prisma/client';
+import { UpdateLeadEtiquetaDto, AssignVendedorDto, FilterLeadsDto } from './dto/leads.dto';
 
 interface ParsedLead {
   nome: string;
@@ -10,12 +9,17 @@ interface ParsedLead {
   cpf?: string;
 }
 
+const LEAD_INCLUDE = {
+  etiqueta: { select: { id: true, nome: true, cor_hexadecimal: true, slug: true } },
+  vendedor: { select: { id: true, nome: true } },
+};
+
 @Injectable()
 export class LeadsService {
   constructor(private prisma: PrismaService) {}
 
   async uploadExcel(tenantId: string, file: Express.Multer.File, campanhaId?: string) {
-    console.log('UPLOAD recebido | arquivo:', file?.originalname, '| mimetype:', file?.mimetype, '| tamanho:', file?.size, '| buffer?', !!file?.buffer);
+    console.log('UPLOAD recebido | arquivo:', file?.originalname, '| mimetype:', file?.mimetype, '| tamanho:', file?.size);
     const isCsv = file.mimetype === 'text/csv' || file.originalname?.toLowerCase().endsWith('.csv');
     let rows: any[];
     if (isCsv) {
@@ -28,37 +32,34 @@ export class LeadsService {
         const values = line.split(delimiter).map((v) => v.trim().replace(/['"]/g, ''));
         return Object.fromEntries(headers.map((h, i) => [h, values[i] ?? '']));
       });
-      console.log('CSV detectado, delimitador:', delimiter, '| colunas:', headers);
     } else {
       const workbook = XLSX.read(file.buffer, { type: 'buffer' });
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
       rows = XLSX.utils.sheet_to_json<any>(sheet, { raw: false });
-      console.log('XLSX detectado | mimetype:', file.mimetype);
     }
-    console.log('=== DEBUG UPLOAD ===');
-    console.log('Total linhas:', rows.length);
-    console.log('Linha 1 raw:', JSON.stringify(rows[0]));
-    console.log('Chaves linha 1:', rows[0] ? Object.keys(rows[0]) : 'VAZIO');
-    console.log('Char codes header:', rows[0] ? Object.keys(rows[0]).map(k => `${k}=[${[...k].map(c => c.charCodeAt(0))}]`) : '');
 
     const leads: ParsedLead[] = rows
       .map((row) => {
         const get = (keys: string[]) => {
           for (const k of keys) {
-            const val = row[k] ?? row[k.toLowerCase()] ?? row[k.toUpperCase()] ?? row[k.charAt(0).toUpperCase() + k.slice(1).toLowerCase()];
+            const val = row[k] ?? row[k.toLowerCase()] ?? row[k.toUpperCase()];
             if (val !== undefined && val !== null && String(val).trim() !== '') return String(val).trim();
           }
           return '';
         };
         return {
-          nome: get(['nome', 'Nome', 'NOME', 'name', 'Name']),
-          telefone: get(['telefone', 'Telefone', 'TELEFONE', 'celular', 'Celular', 'CELULAR', 'phone', 'fone']),
-          cpf: get(['cpf', 'CPF', 'Cpf']) || undefined,
+          nome: get(['nome', 'Nome', 'NOME', 'name']),
+          telefone: get(['telefone', 'Telefone', 'TELEFONE', 'celular', 'Celular', 'phone', 'fone']),
+          cpf: get(['cpf', 'CPF']) || undefined,
         };
       })
       .filter((l) => l.nome && l.telefone);
 
-    console.log('Leads após filtro:', leads.length, '| exemplo:', JSON.stringify(leads[0]));
+    // Busca a etiqueta padrão "balde_geral" do tenant
+    const etiquetaPadrao = await this.prisma.etiqueta.findFirst({
+      where: { tenant_id: tenantId, slug: 'balde_geral' },
+    });
+
     let inserted = 0;
     let skipped = 0;
 
@@ -71,16 +72,16 @@ export class LeadsService {
             telefone: this.normalizeTelefone(lead.telefone),
             cpf: lead.cpf || null,
             campanha_id: campanhaId || null,
+            etiqueta_id: etiquetaPadrao?.id || null,
           },
         });
         inserted++;
-      } catch (e) {
-        // CPF duplicado por tenant — pula
+      } catch {
         skipped++;
       }
     }
 
-    if (campanhaId) {
+    if (campanhaId && inserted > 0) {
       await this.prisma.campanhaFila.update({
         where: { id: campanhaId },
         data: { total_leads: { increment: inserted } },
@@ -90,14 +91,19 @@ export class LeadsService {
     return { total: leads.length, inserted, skipped };
   }
 
-  async findAll(tenantId: string, filters: FilterLeadsDto) {
+  async findAll(tenantId: string, filters: FilterLeadsDto, userId?: string, userRole?: string) {
     const page = Number(filters.page) || 1;
     const limit = Number(filters.limit) || 20;
     const skip = (page - 1) * limit;
 
     const where: any = { tenant_id: tenantId };
 
-    if (filters.status) where.status_atual = filters.status;
+    // Vendedor só vê seus próprios leads
+    if (userRole === 'atendente' && userId) {
+      where.vendedor_id = userId;
+    }
+
+    if (filters.etiqueta_id) where.etiqueta_id = filters.etiqueta_id;
     if (filters.search) {
       where.OR = [
         { nome: { contains: filters.search, mode: 'insensitive' } },
@@ -107,53 +113,91 @@ export class LeadsService {
     }
 
     const [data, total] = await this.prisma.$transaction([
-      this.prisma.lead.findMany({ where, skip, take: limit, orderBy: { criado_em: 'desc' } }),
+      this.prisma.lead.findMany({ where, skip, take: limit, orderBy: { criado_em: 'desc' }, include: LEAD_INCLUDE }),
       this.prisma.lead.count({ where }),
     ]);
 
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
-  async findKanban(tenantId: string) {
-    const leads = await this.prisma.lead.findMany({
+  async findKanban(tenantId: string, userId?: string, userRole?: string) {
+    const etiquetas = await this.prisma.etiqueta.findMany({
       where: { tenant_id: tenantId },
-      orderBy: { criado_em: 'asc' },
+      orderBy: { ordem: 'asc' },
     });
 
-    return {
-      balde_geral: leads.filter((l) => l.status_atual === LeadStatus.balde_geral),
-      aguardando_resposta: leads.filter((l) => l.status_atual === LeadStatus.aguardando_resposta),
-      em_atendimento: leads.filter((l) => l.status_atual === LeadStatus.em_atendimento),
-      finalizado: leads.filter((l) => l.status_atual === LeadStatus.finalizado),
-    };
+    const leadWhere: any = { tenant_id: tenantId };
+    if (userRole === 'atendente' && userId) {
+      leadWhere.vendedor_id = userId;
+    }
+
+    const leads = await this.prisma.lead.findMany({
+      where: leadWhere,
+      orderBy: { criado_em: 'asc' },
+      include: LEAD_INCLUDE,
+    });
+
+    const colunas: Record<string, typeof leads> = {};
+    for (const e of etiquetas) colunas[e.id] = [];
+    for (const lead of leads) {
+      const col = lead.etiqueta_id || etiquetas[0]?.id;
+      if (col && colunas[col] !== undefined) colunas[col].push(lead);
+    }
+
+    return { etiquetas, colunas };
   }
 
   async getStats(tenantId: string) {
-    const [total, disparados, aguardando, emAtendimento, finalizado, mensagens] = await this.prisma.$transaction([
+    const etAtendimento = await this.prisma.etiqueta.findFirst({
+      where: { tenant_id: tenantId, slug: 'em_atendimento' },
+    });
+
+    const [total, disparados, emAtendimento, mensagens] = await this.prisma.$transaction([
       this.prisma.lead.count({ where: { tenant_id: tenantId } }),
       this.prisma.lead.count({ where: { tenant_id: tenantId, disparado: true } }),
-      this.prisma.lead.count({ where: { tenant_id: tenantId, status_atual: LeadStatus.aguardando_resposta } }),
-      this.prisma.lead.count({ where: { tenant_id: tenantId, status_atual: LeadStatus.em_atendimento } }),
-      this.prisma.lead.count({ where: { tenant_id: tenantId, status_atual: LeadStatus.finalizado } }),
+      this.prisma.lead.count({ where: { tenant_id: tenantId, ...(etAtendimento ? { etiqueta_id: etAtendimento.id } : {}) } }),
       this.prisma.message.count({ where: { tenant_id: tenantId } }),
     ]);
 
-    return { total, disparados, aguardando, emAtendimento, finalizado, mensagens };
+    return { total, disparados, emAtendimento, mensagens };
   }
 
-  async updateStatus(tenantId: string, leadId: number, dto: UpdateLeadStatusDto) {
-    const lead = await this.prisma.lead.findFirst({
-      where: { id_number: leadId, tenant_id: tenantId },
-    });
+  async updateEtiqueta(tenantId: string, leadId: number, dto: UpdateLeadEtiquetaDto, userId?: string, userRole?: string) {
+    const where: any = { id_number: leadId, tenant_id: tenantId };
+    if (userRole === 'atendente' && userId) where.vendedor_id = userId;
+
+    const lead = await this.prisma.lead.findFirst({ where });
     if (!lead) throw new NotFoundException('Lead não encontrado.');
 
     return this.prisma.lead.update({
       where: { id_number: leadId },
-      data: { status_atual: dto.status_atual },
+      data: { etiqueta_id: dto.etiqueta_id },
+      include: LEAD_INCLUDE,
+    });
+  }
+
+  async assignVendedor(tenantId: string, leadId: number, dto: AssignVendedorDto) {
+    const lead = await this.prisma.lead.findFirst({ where: { id_number: leadId, tenant_id: tenantId } });
+    if (!lead) throw new NotFoundException('Lead não encontrado.');
+    return this.prisma.lead.update({
+      where: { id_number: leadId },
+      data: { vendedor_id: dto.vendedor_id },
+      include: LEAD_INCLUDE,
+    });
+  }
+
+  async listVendedores(tenantId: string) {
+    return this.prisma.user.findMany({
+      where: { tenant_id: tenantId, ativo: true, role: 'atendente' },
+      select: { id: true, nome: true, email: true },
+      orderBy: { nome: 'asc' },
     });
   }
 
   async bulkInsert(tenantId: string, leads: ParsedLead[], campanhaId?: string) {
+    const etiquetaPadrao = await this.prisma.etiqueta.findFirst({
+      where: { tenant_id: tenantId, slug: 'balde_geral' },
+    });
     let inserted = 0;
     let skipped = 0;
     for (const lead of leads) {
@@ -166,6 +210,7 @@ export class LeadsService {
             telefone: this.normalizeTelefone(lead.telefone),
             cpf: lead.cpf || null,
             campanha_id: campanhaId || null,
+            etiqueta_id: etiquetaPadrao?.id || null,
           },
         });
         inserted++;
@@ -184,14 +229,8 @@ export class LeadsService {
 
   private normalizeTelefone(telefone: string): string {
     const digits = telefone.replace(/\D/g, '');
-    // Já tem código do país 55 e tamanho correto (12 ou 13 dígitos)
-    if (digits.startsWith('55') && (digits.length === 12 || digits.length === 13)) {
-      return digits;
-    }
-    // 10 dígitos (DDD + 8) ou 11 dígitos (DDD + 9) → adiciona 55
-    if (digits.length === 10 || digits.length === 11) {
-      return '55' + digits;
-    }
+    if (digits.startsWith('55') && (digits.length === 12 || digits.length === 13)) return digits;
+    if (digits.length === 10 || digits.length === 11) return '55' + digits;
     return digits;
   }
 }

@@ -2,7 +2,7 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ChatwootService } from '../chatwoot/chatwoot.service';
 import { CanaisService } from '../canais/canais.service';
-import { LeadStatus, MessageStatus } from '@prisma/client';
+import { MessageStatus, MessageDirection } from '@prisma/client';
 import axios from 'axios';
 
 @Injectable()
@@ -112,15 +112,18 @@ export class WebhookService {
   }
 
   private async processMetaPayload(tenant: { id: string }, canal: any, changes: any) {
-    // Callbacks de status de entrega
     const statuses = changes?.value?.statuses;
     if (statuses?.length) {
       await this.processStatusUpdates(statuses);
     }
 
-    // Mensagens recebidas (respostas do cliente)
     const messages = changes?.value?.messages;
     if (!messages?.length) return;
+
+    // Busca etiqueta "em_atendimento" para mover o lead ao responder
+    const etAtendimento = await this.prisma.etiqueta.findFirst({
+      where: { tenant_id: tenant.id, slug: 'em_atendimento' },
+    });
 
     for (const msg of messages) {
       const telefone = msg.from;
@@ -132,10 +135,25 @@ export class WebhookService {
         where: { tenant_id: tenant.id, telefone },
       });
 
-      if (lead && lead.status_atual === LeadStatus.aguardando_resposta) {
-        await this.prisma.lead.update({
-          where: { id_number: lead.id_number },
-          data: { status_atual: LeadStatus.em_atendimento },
+      if (lead) {
+        // Mover para "em atendimento" se estava aguardando resposta
+        if (etAtendimento) {
+          await this.prisma.lead.update({
+            where: { id_number: lead.id_number },
+            data: { etiqueta_id: etAtendimento.id },
+          });
+        }
+
+        // Salvar mensagem recebida no banco
+        await this.prisma.message.create({
+          data: {
+            tenant_id: tenant.id,
+            canal_id: canal?.id || null,
+            lead_id: lead.id_number,
+            direction: MessageDirection.entrada,
+            content: texto,
+            status: MessageStatus.entregue,
+          },
         });
       }
 

@@ -3,10 +3,11 @@ import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateTenantDto, UpdateTenantStatusDto } from './dto/create-tenant.dto';
 import { UserRole, SubscriptionStatus } from '@prisma/client';
+import { EtiquetasService } from '../etiquetas/etiquetas.service';
 
 @Injectable()
 export class TenantsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private etiquetasService: EtiquetasService) {}
 
   async create(dto: CreateTenantDto) {
     const slugExists = await this.prisma.tenant.findUnique({ where: { slug: dto.slug } });
@@ -34,6 +35,8 @@ export class TenantsService {
         },
       },
     });
+
+    await this.etiquetasService.seedForTenant(tenant.id);
 
     return tenant;
   }

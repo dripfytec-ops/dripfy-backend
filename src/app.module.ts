@@ -10,6 +10,7 @@ import { CanaisModule } from './modules/canais/canais.module';
 import { ChatwootModule } from './modules/chatwoot/chatwoot.module';
 import { WebhookModule } from './modules/webhook/webhook.module';
 import { MessagesModule } from './modules/messages/messages.module';
+import { EtiquetasModule } from './modules/etiquetas/etiquetas.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { MessagesModule } from './modules/messages/messages.module';
     ChatwootModule,
     WebhookModule,
     MessagesModule,
+    EtiquetasModule,
   ],
 })
 export class AppModule {}

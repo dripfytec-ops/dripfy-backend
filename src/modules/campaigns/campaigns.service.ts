@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateCampaignDto } from './dto/campaign.dto';
-import { CampaignStatus, LeadStatus, MessageStatus } from '@prisma/client';
+import { CampaignStatus, MessageStatus } from '@prisma/client';
 import axios from 'axios';
 
 @Injectable()
@@ -168,9 +168,12 @@ export class CampaignsService {
       await this.prisma.message.create({
         data: { tenant_id: data.tenantId, canal_id: data.canalId, lead_id: data.leadId, campanha_id: data.campanhaId, wamid, template_name: data.templateName, status: MessageStatus.enviado },
       });
+      const etAguardando = await this.prisma.etiqueta.findFirst({
+        where: { tenant_id: data.tenantId, slug: 'aguardando_resposta' },
+      });
       await this.prisma.lead.update({
         where: { id_number: data.leadId },
-        data: { disparado: true, status_atual: LeadStatus.aguardando_resposta },
+        data: { disparado: true, ...(etAguardando ? { etiqueta_id: etAguardando.id } : {}) },
       });
       await this.prisma.campanhaFila.update({
         where: { id: data.campanhaId },
