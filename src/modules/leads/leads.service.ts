@@ -57,7 +57,7 @@ export class LeadsService {
 
     // Busca a etiqueta padrão "balde_geral" do tenant
     const etiquetaPadrao = await this.prisma.etiqueta.findFirst({
-      where: { tenant_id: tenantId, slug: 'balde_geral' },
+      where: { tenant_id: tenantId, slug: 'disparados' },
     });
 
     let inserted = 0;
@@ -149,7 +149,7 @@ export class LeadsService {
 
   async getStats(tenantId: string) {
     const etAtendimento = await this.prisma.etiqueta.findFirst({
-      where: { tenant_id: tenantId, slug: 'em_atendimento' },
+      where: { tenant_id: tenantId, slug: 'responderam' },
     });
 
     const [total, disparados, emAtendimento, mensagens] = await this.prisma.$transaction([
@@ -196,7 +196,7 @@ export class LeadsService {
 
   async bulkInsert(tenantId: string, leads: ParsedLead[], campanhaId?: string) {
     const etiquetaPadrao = await this.prisma.etiqueta.findFirst({
-      where: { tenant_id: tenantId, slug: 'balde_geral' },
+      where: { tenant_id: tenantId, slug: 'disparados' },
     });
     let inserted = 0;
     let skipped = 0;

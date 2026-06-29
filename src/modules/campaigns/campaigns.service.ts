@@ -169,7 +169,7 @@ export class CampaignsService {
         data: { tenant_id: data.tenantId, canal_id: data.canalId, lead_id: data.leadId, campanha_id: data.campanhaId, wamid, template_name: data.templateName, status: MessageStatus.enviado },
       });
       const etAguardando = await this.prisma.etiqueta.findFirst({
-        where: { tenant_id: data.tenantId, slug: 'aguardando_resposta' },
+        where: { tenant_id: data.tenantId, slug: 'disparados' },
       });
       await this.prisma.lead.update({
         where: { id_number: data.leadId },

@@ -120,9 +120,9 @@ export class WebhookService {
     const messages = changes?.value?.messages;
     if (!messages?.length) return;
 
-    // Busca etiqueta "em_atendimento" para mover o lead ao responder
+    // Busca etiqueta "responderam" para mover o lead ao responder
     const etAtendimento = await this.prisma.etiqueta.findFirst({
-      where: { tenant_id: tenant.id, slug: 'em_atendimento' },
+      where: { tenant_id: tenant.id, slug: 'responderam' },
     });
 
     for (const msg of messages) {
