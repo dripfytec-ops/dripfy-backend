@@ -2,7 +2,7 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ChatwootService } from '../chatwoot/chatwoot.service';
 import { CanaisService } from '../canais/canais.service';
-import { MessageStatus, MessageDirection } from '@prisma/client';
+import { MessageStatus, MessageDirection, LeadStatus } from '@prisma/client';
 import axios from 'axios';
 
 @Injectable()
