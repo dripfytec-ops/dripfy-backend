@@ -128,38 +128,56 @@ export class WebhookService {
     for (const msg of messages) {
       const telefone = msg.from;
       const texto = msg.text?.body || '[mídia]';
+      const wamidEntrada = msg.id || null;
 
       this.logger.log(`Mensagem recebida de ${telefone} → "${texto}"`);
 
-      const lead = await this.prisma.lead.findFirst({
+      // Busca o lead mais antigo com esse telefone (evita duplicatas)
+      let lead = await this.prisma.lead.findFirst({
         where: { tenant_id: tenant.id, telefone },
+        orderBy: { criado_em: 'asc' },
       });
 
-      if (lead) {
-        // Mover para "em atendimento" se estava aguardando resposta
+      if (!lead) {
+        // Número desconhecido → cria lead automaticamente marcado como iniciado pelo cliente
+        this.logger.log(`Número desconhecido ${telefone} — criando lead automaticamente`);
+        lead = await this.prisma.lead.create({
+          data: {
+            tenant_id: tenant.id,
+            nome: `Contato ${telefone}`,
+            telefone,
+            iniciado_pelo_cliente: true,
+            etiqueta_id: etAtendimento?.id || null,
+          },
+        });
+      } else {
+        // Lead existente → mover para "Responderam"
         if (etAtendimento) {
           await this.prisma.lead.update({
             where: { id_number: lead.id_number },
             data: { etiqueta_id: etAtendimento.id },
           });
         }
-
-        // Salvar mensagem recebida no banco
-        await this.prisma.message.create({
-          data: {
-            tenant_id: tenant.id,
-            canal_id: canal?.id || null,
-            lead_id: lead.id_number,
-            direction: MessageDirection.entrada,
-            content: texto,
-            status: MessageStatus.entregue,
-          },
-        });
       }
+
+      // Salvar mensagem recebida (ignora se o wamid já existe)
+      await this.prisma.message.upsert({
+        where: { wamid: wamidEntrada || `entrada-${lead.id_number}-${Date.now()}` },
+        update: {},
+        create: {
+          tenant_id: tenant.id,
+          canal_id: canal?.id || null,
+          lead_id: lead.id_number,
+          wamid: wamidEntrada,
+          direction: MessageDirection.entrada,
+          content: texto,
+          status: MessageStatus.entregue,
+        },
+      });
 
       const contactId = await this.chatwootService.createOrUpdateContact(
         tenant.id,
-        lead?.nome || telefone,
+        lead.nome,
         telefone,
       );
 

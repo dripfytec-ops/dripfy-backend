@@ -23,6 +23,14 @@ export class MessagesService {
     });
   }
 
+  async deleteByLead(tenantId: string, leadId: number) {
+    // Verifica que o lead pertence ao tenant antes de deletar
+    const lead = await this.prisma.lead.findFirst({ where: { id_number: leadId, tenant_id: tenantId } });
+    if (!lead) throw new Error('Lead não encontrado.');
+    const { count } = await this.prisma.message.deleteMany({ where: { lead_id: leadId, tenant_id: tenantId } });
+    return { deleted: count };
+  }
+
   async reply(tenantId: string, leadId: number, texto: string) {
     const lead = await this.prisma.lead.findFirst({
       where: { id_number: leadId, tenant_id: tenantId },

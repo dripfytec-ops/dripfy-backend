@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, Body, ParseIntPipe, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Param, Body, ParseIntPipe, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { MessagesService } from './messages.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -24,6 +24,15 @@ export class MessagesController {
   @ApiOperation({ summary: 'Últimas mensagens do tenant' })
   getRecent(@CurrentUser('tenant_id') tenantId: string) {
     return this.messagesService.getByTenant(tenantId);
+  }
+
+  @Delete('lead/:leadId')
+  @ApiOperation({ summary: 'Apagar histórico de mensagens de um lead' })
+  deleteByLead(
+    @CurrentUser('tenant_id') tenantId: string,
+    @Param('leadId', ParseIntPipe) leadId: number,
+  ) {
+    return this.messagesService.deleteByLead(tenantId, leadId);
   }
 
   @Post('reply/:leadId')

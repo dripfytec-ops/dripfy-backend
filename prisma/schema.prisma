@@ -145,7 +145,8 @@ model Lead {
   status_atual  LeadStatus @default(balde_geral)
   etiqueta_id   String?
   vendedor_id   String?
-  disparado     Boolean    @default(false)
+  disparado               Boolean    @default(false)
+  iniciado_pelo_cliente   Boolean    @default(false)
   campanha_id   String?
   criado_em     DateTime   @default(now())
   atualizado_em DateTime   @updatedAt
