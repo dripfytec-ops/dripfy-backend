@@ -1,6 +1,6 @@
-import { Controller, Get, Post, Patch, Param, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { UsersService, CreateUserDto } from './users.service';
+import { UsersService, CreateUserDto, UpdateUserDto } from './users.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -49,5 +49,27 @@ export class UsersController {
     @CurrentUser('tenant_id') tenantId: string,
   ) {
     return this.usersService.resetPassword(id, dto.new_password, role, tenantId);
+  }
+
+  @Patch(':id')
+  @Roles(UserRole.admin_master, UserRole.lojista_admin)
+  @ApiOperation({ summary: 'Atualiza nome/email de um usuário' })
+  update(
+    @Param('id') id: string,
+    @CurrentUser('tenant_id') tenantId: string,
+    @Body() dto: UpdateUserDto,
+  ) {
+    return this.usersService.update(tenantId, id, dto);
+  }
+
+  @Delete(':id')
+  @Roles(UserRole.admin_master, UserRole.lojista_admin)
+  @ApiOperation({ summary: 'Remove um usuário do tenant' })
+  remove(
+    @Param('id') id: string,
+    @CurrentUser('tenant_id') tenantId: string,
+    @CurrentUser('id') callerId: string,
+  ) {
+    return this.usersService.remove(tenantId, id, callerId);
   }
 }

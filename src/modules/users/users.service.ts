@@ -1,4 +1,4 @@
-import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
+import { Injectable, ConflictException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../../prisma/prisma.service';
 import { UserRole } from '@prisma/client';
@@ -8,6 +8,11 @@ export class CreateUserDto {
   email: string;
   password: string;
   role: UserRole;
+}
+
+export class UpdateUserDto {
+  nome?: string;
+  email?: string;
 }
 
 @Injectable()
@@ -60,5 +65,27 @@ export class UsersService {
       data: { password_hash },
       select: { id: true, nome: true, email: true },
     });
+  }
+
+  async update(tenantId: string, userId: string, dto: UpdateUserDto) {
+    const user = await this.prisma.user.findFirst({ where: { id: userId, tenant_id: tenantId } });
+    if (!user) throw new NotFoundException('Usuário não encontrado.');
+    if (dto.email && dto.email !== user.email) {
+      const conflict = await this.prisma.user.findFirst({ where: { tenant_id: tenantId, email: dto.email } });
+      if (conflict) throw new ConflictException('E-mail já em uso neste tenant.');
+    }
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { ...(dto.nome && { nome: dto.nome }), ...(dto.email && { email: dto.email }) },
+      select: { id: true, nome: true, email: true, role: true, ativo: true },
+    });
+  }
+
+  async remove(tenantId: string, userId: string, callerId: string) {
+    if (userId === callerId) throw new ForbiddenException('Você não pode excluir sua própria conta.');
+    const user = await this.prisma.user.findFirst({ where: { id: userId, tenant_id: tenantId } });
+    if (!user) throw new NotFoundException('Usuário não encontrado.');
+    await this.prisma.user.delete({ where: { id: userId } });
+    return { deleted: true };
   }
 }
