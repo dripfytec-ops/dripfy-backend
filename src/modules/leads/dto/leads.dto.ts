@@ -30,4 +30,9 @@ export class FilterLeadsDto {
   @ApiPropertyOptional()
   @IsOptional()
   limit?: number;
+
+  @ApiPropertyOptional({ enum: ['recent', 'default'] })
+  @IsOptional()
+  @IsString()
+  sort?: 'recent' | 'default';
 }

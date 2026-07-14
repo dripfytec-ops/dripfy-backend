@@ -67,15 +67,6 @@ export class LeadsController {
     return this.leadsService.getStats(tenantId);
   }
 
-  @Get('kanban')
-  kanban(
-    @CurrentUser('tenant_id') tenantId: string,
-    @CurrentUser('id') userId: string,
-    @CurrentUser('role') role: string,
-  ) {
-    return this.leadsService.findKanban(tenantId, userId, role);
-  }
-
   @Get('vendedores')
   @Roles(UserRole.admin_master, UserRole.lojista_admin)
   listVendedores(@CurrentUser('tenant_id') tenantId: string) {
@@ -103,5 +94,14 @@ export class LeadsController {
     @Body() dto: AssignVendedorDto,
   ) {
     return this.leadsService.assignVendedor(tenantId, id, dto);
+  }
+
+  @Patch(':id/read')
+  @ApiOperation({ summary: 'Marca a conversa do lead como lida (zera unread_count)' })
+  markRead(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser('tenant_id') tenantId: string,
+  ) {
+    return this.leadsService.markRead(tenantId, id);
   }
 }

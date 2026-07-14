@@ -148,6 +148,9 @@ model Lead {
   disparado               Boolean    @default(false)
   iniciado_pelo_cliente   Boolean    @default(false)
   campanha_id   String?
+  last_message_at      DateTime?
+  last_message_preview String?
+  unread_count          Int       @default(0)
   criado_em     DateTime   @default(now())
   atualizado_em DateTime   @updatedAt
 
@@ -161,6 +164,7 @@ model Lead {
   @@index([tenant_id, status_atual])
   @@index([tenant_id, etiqueta_id])
   @@index([tenant_id, disparado])
+  @@index([tenant_id, last_message_at])
   @@map("leads")
 }
 

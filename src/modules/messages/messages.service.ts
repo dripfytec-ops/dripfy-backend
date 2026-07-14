@@ -56,17 +56,28 @@ export class MessagesService {
 
       const wamid = response.data?.messages?.[0]?.id;
 
-      return this.prisma.message.create({
-        data: {
-          tenant_id: tenantId,
-          canal_id: canal.id,
-          lead_id: leadId,
-          direction: MessageDirection.saida,
-          content: texto,
-          wamid,
-          status: MessageStatus.enviado,
-        },
-      });
+      const [message] = await this.prisma.$transaction([
+        this.prisma.message.create({
+          data: {
+            tenant_id: tenantId,
+            canal_id: canal.id,
+            lead_id: leadId,
+            direction: MessageDirection.saida,
+            content: texto,
+            wamid,
+            status: MessageStatus.enviado,
+          },
+        }),
+        this.prisma.lead.update({
+          where: { id_number: leadId },
+          data: {
+            last_message_at: new Date(),
+            last_message_preview: texto.slice(0, 120),
+          },
+        }),
+      ]);
+
+      return message;
     } catch (error: any) {
       const metaError = error?.response?.data?.error;
       // Código 131047 = fora da janela de 24h de atendimento

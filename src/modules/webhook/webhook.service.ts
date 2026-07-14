@@ -148,16 +148,27 @@ export class WebhookService {
             telefone,
             iniciado_pelo_cliente: true,
             etiqueta_id: etAtendimento?.id || null,
+            last_message_at: new Date(),
+            last_message_preview: texto.slice(0, 120),
+            unread_count: 1,
           },
         });
       } else {
-        // Lead existente → mover para "Responderam"
+        // Lead existente → mover para "Responderam" (se aplicável) e atualizar última mensagem/não lidas
         if (etAtendimento) {
           await this.prisma.lead.update({
             where: { id_number: lead.id_number },
             data: { etiqueta_id: etAtendimento.id },
           });
         }
+        await this.prisma.lead.update({
+          where: { id_number: lead.id_number },
+          data: {
+            last_message_at: new Date(),
+            last_message_preview: texto.slice(0, 120),
+            unread_count: { increment: 1 },
+          },
+        });
       }
 
       // Salvar mensagem recebida (ignora se o wamid já existe)

@@ -112,39 +112,27 @@ export class LeadsService {
       ];
     }
 
+    const orderBy =
+      filters.sort === 'recent'
+        ? [{ last_message_at: { sort: 'desc' as const, nulls: 'last' as const } }, { criado_em: 'desc' as const }]
+        : { criado_em: 'desc' as const };
+
     const [data, total] = await this.prisma.$transaction([
-      this.prisma.lead.findMany({ where, skip, take: limit, orderBy: { criado_em: 'desc' }, include: LEAD_INCLUDE }),
+      this.prisma.lead.findMany({ where, skip, take: limit, orderBy, include: LEAD_INCLUDE }),
       this.prisma.lead.count({ where }),
     ]);
 
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
-  async findKanban(tenantId: string, userId?: string, userRole?: string) {
-    const etiquetas = await this.prisma.etiqueta.findMany({
-      where: { tenant_id: tenantId },
-      orderBy: { ordem: 'asc' },
-    });
-
-    const leadWhere: any = { tenant_id: tenantId };
-    if (userRole === 'atendente' && userId) {
-      leadWhere.vendedor_id = userId;
-    }
-
-    const leads = await this.prisma.lead.findMany({
-      where: leadWhere,
-      orderBy: { criado_em: 'asc' },
+  async markRead(tenantId: string, leadId: number) {
+    const lead = await this.prisma.lead.findFirst({ where: { id_number: leadId, tenant_id: tenantId } });
+    if (!lead) throw new NotFoundException('Lead não encontrado.');
+    return this.prisma.lead.update({
+      where: { id_number: leadId },
+      data: { unread_count: 0 },
       include: LEAD_INCLUDE,
     });
-
-    const colunas: Record<string, typeof leads> = {};
-    for (const e of etiquetas) colunas[e.id] = [];
-    for (const lead of leads) {
-      const col = lead.etiqueta_id || etiquetas[0]?.id;
-      if (col && colunas[col] !== undefined) colunas[col].push(lead);
-    }
-
-    return { etiquetas, colunas };
   }
 
   async getStats(tenantId: string) {
