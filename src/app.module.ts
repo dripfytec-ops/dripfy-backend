@@ -5,8 +5,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { UsersModule } from './modules/users/users.module';
 import { LeadsModule } from './modules/leads/leads.module';
-import { CampaignsModule } from './modules/campaigns/campaigns.module';
-import { CanaisModule } from './modules/canais/canais.module';
+import { DisparoMassaModule } from './modules/disparo-massa/disparo-massa.module';
 import { ChatwootModule } from './modules/chatwoot/chatwoot.module';
 import { WebhookModule } from './modules/webhook/webhook.module';
 import { MessagesModule } from './modules/messages/messages.module';
@@ -20,8 +19,7 @@ import { EtiquetasModule } from './modules/etiquetas/etiquetas.module';
     TenantsModule,
     UsersModule,
     LeadsModule,
-    CampaignsModule,
-    CanaisModule,
+    DisparoMassaModule,
     ChatwootModule,
     WebhookModule,
     MessagesModule,

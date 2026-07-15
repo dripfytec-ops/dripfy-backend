@@ -18,7 +18,7 @@ const LEAD_INCLUDE = {
 export class LeadsService {
   constructor(private prisma: PrismaService) {}
 
-  async uploadExcel(tenantId: string, file: Express.Multer.File, campanhaId?: string) {
+  async uploadExcel(tenantId: string, file: Express.Multer.File) {
     console.log('UPLOAD recebido | arquivo:', file?.originalname, '| mimetype:', file?.mimetype, '| tamanho:', file?.size);
     const isCsv = file.mimetype === 'text/csv' || file.originalname?.toLowerCase().endsWith('.csv');
     let rows: any[];
@@ -71,7 +71,6 @@ export class LeadsService {
             nome: lead.nome,
             telefone: this.normalizeTelefone(lead.telefone),
             cpf: lead.cpf || null,
-            campanha_id: campanhaId || null,
             etiqueta_id: etiquetaPadrao?.id || null,
           },
         });
@@ -79,13 +78,6 @@ export class LeadsService {
       } catch {
         skipped++;
       }
-    }
-
-    if (campanhaId && inserted > 0) {
-      await this.prisma.campanhaFila.update({
-        where: { id: campanhaId },
-        data: { total_leads: { increment: inserted } },
-      });
     }
 
     return { total: leads.length, inserted, skipped };
@@ -182,7 +174,7 @@ export class LeadsService {
     });
   }
 
-  async bulkInsert(tenantId: string, leads: ParsedLead[], campanhaId?: string) {
+  async bulkInsert(tenantId: string, leads: ParsedLead[]) {
     const etiquetaPadrao = await this.prisma.etiqueta.findFirst({
       where: { tenant_id: tenantId, slug: 'disparados' },
     });
@@ -197,7 +189,6 @@ export class LeadsService {
             nome: lead.nome,
             telefone: this.normalizeTelefone(lead.telefone),
             cpf: lead.cpf || null,
-            campanha_id: campanhaId || null,
             etiqueta_id: etiquetaPadrao?.id || null,
           },
         });
@@ -205,12 +196,6 @@ export class LeadsService {
       } catch {
         skipped++;
       }
-    }
-    if (campanhaId && inserted > 0) {
-      await this.prisma.campanhaFila.update({
-        where: { id: campanhaId },
-        data: { total_leads: { increment: inserted } },
-      });
     }
     return { total: leads.length, inserted, skipped };
   }

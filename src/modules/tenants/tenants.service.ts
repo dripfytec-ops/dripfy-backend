@@ -55,9 +55,9 @@ export class TenantsService {
       where: { id },
       include: {
         users: { select: { id: true, nome: true, email: true, role: true, ativo: true } },
-        canais: { select: { id: true, nome: true, phone_number_id: true, ativo: true } },
+        dm_canais: { select: { id: true, nome: true, phone_number_id: true, ativo: true } },
         chatwoot_config: { select: { id: true, chatwoot_url: true } },
-        _count: { select: { leads: true, campanhas: true } },
+        _count: { select: { leads: true, dm_campanhas: true } },
       },
     });
 

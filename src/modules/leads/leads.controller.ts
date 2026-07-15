@@ -25,16 +25,14 @@ export class LeadsController {
   upload(
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser('tenant_id') tenantId: string,
-    @Query('campanha_id') campanhaId?: string,
   ) {
-    return this.leadsService.uploadExcel(tenantId, file, campanhaId);
+    return this.leadsService.uploadExcel(tenantId, file);
   }
 
   @Post('bulk')
   bulk(
     @Body('text') text: string,
     @CurrentUser('tenant_id') tenantId: string,
-    @Query('campanha_id') campanhaId?: string,
   ) {
     if (!text) throw new BadRequestException('Nenhum texto enviado.');
     const clean = (text as string).replace(/\r/g, '');
@@ -49,7 +47,7 @@ export class LeadsController {
       const cols = line.split(delim).map((c) => c.trim());
       return { nome: cols[0] || '', telefone: cols[1] || '', cpf: cols[2] || undefined };
     });
-    return this.leadsService.bulkInsert(tenantId, leads, campanhaId);
+    return this.leadsService.bulkInsert(tenantId, leads);
   }
 
   @Get()

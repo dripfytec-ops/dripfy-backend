@@ -37,7 +37,7 @@ export class MessagesService {
     });
     if (!lead) throw new NotFoundException('Lead não encontrado.');
 
-    const canal = await this.prisma.canal.findFirst({
+    const canal = await this.prisma.dmCanal.findFirst({
       where: { tenant_id: tenantId, ativo: true },
     });
     if (!canal) throw new NotFoundException('Nenhum canal WhatsApp ativo encontrado.');
@@ -51,7 +51,7 @@ export class MessagesService {
           type: 'text',
           text: { body: texto },
         },
-        { headers: { Authorization: `Bearer ${canal.meta_access_token}` } },
+        { headers: { Authorization: `Bearer ${canal.access_token}` } },
       );
 
       const wamid = response.data?.messages?.[0]?.id;

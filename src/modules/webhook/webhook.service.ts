@@ -1,7 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ChatwootService } from '../chatwoot/chatwoot.service';
-import { CanaisService } from '../canais/canais.service';
+import { DmCanaisService } from '../disparo-massa/dm-canais.service';
 import { MessageStatus, MessageDirection, LeadStatus } from '@prisma/client';
 import axios from 'axios';
 
@@ -12,7 +12,7 @@ export class WebhookService {
   constructor(
     private prisma: PrismaService,
     private chatwootService: ChatwootService,
-    private canaisService: CanaisService,
+    private canaisService: DmCanaisService,
   ) {}
 
   async insertLeadAndFireImmediate(tenantSlug: string, data: { nome: string; telefone: string; cpf?: string }) {
@@ -49,7 +49,7 @@ export class WebhookService {
               components: [{ type: 'body', parameters: [{ type: 'text', text: data.nome }] }],
             },
           },
-          { headers: { Authorization: `Bearer ${canal.meta_access_token}` } },
+          { headers: { Authorization: `Bearer ${canal.access_token}` } },
         );
 
         await this.prisma.lead.update({
@@ -87,6 +87,10 @@ export class WebhookService {
     const canal = await this.canaisService.findByPhoneNumberIdGlobal(phoneNumberId);
     if (!canal) {
       this.logger.warn(`Webhook recebido para phoneNumberId desconhecido: ${phoneNumberId}`);
+      // Mesmo sem canal de leads/chat identificado, tenta atualizar status de
+      // entrega de contatos do Disparo em Massa (podem usar o mesmo número).
+      const statuses = changes?.value?.statuses;
+      if (statuses?.length) await this.processStatusUpdates(statuses);
       return;
     }
 
@@ -210,20 +214,51 @@ export class WebhookService {
       read: MessageStatus.lido,
       failed: MessageStatus.erro,
     };
+    const dmStatusMap: Record<string, 'entregue' | 'lido' | 'falha'> = {
+      delivered: 'entregue',
+      read: 'lido',
+      failed: 'falha',
+    };
 
     for (const s of statuses) {
       const newStatus = statusMap[s.status];
-      if (!newStatus || !s.id) continue;
+      if (newStatus && s.id) {
+        await this.prisma.message.updateMany({
+          where: { wamid: s.id },
+          data: {
+            status: newStatus,
+            ...(s.status === 'failed' ? { erro_msg: s.errors?.[0]?.title || 'Falha no envio' } : {}),
+          },
+        });
+      }
 
-      await this.prisma.message.updateMany({
-        where: { wamid: s.id },
-        data: {
-          status: newStatus,
-          ...(s.status === 'failed' ? { erro_msg: s.errors?.[0]?.title || 'Falha no envio' } : {}),
-        },
-      });
+      const dmStatus = dmStatusMap[s.status];
+      if (dmStatus && s.id) {
+        await this.aplicarStatusDmContato(s.id, dmStatus, s.errors?.[0]?.title || s.errors?.[0]?.message);
+      }
 
-      this.logger.log(`Status atualizado → wamid=${s.id} status=${newStatus}`);
+      this.logger.log(`Status atualizado → wamid=${s.id} status=${newStatus || dmStatus}`);
+    }
+  }
+
+  // Espelha o status de entrega também num contato de Disparo em Massa, se o
+  // message_id bater com um. IS DISTINCT evita reprocessar reentregas do
+  // mesmo webhook (a Meta reenvia "at-least-once").
+  private async aplicarStatusDmContato(messageId: string, novoStatus: 'entregue' | 'lido' | 'falha', motivo?: string) {
+    const contato = await this.prisma.dmContato.findFirst({ where: { message_id: messageId } });
+    if (!contato || contato.status === novoStatus) return;
+
+    await this.prisma.dmContato.update({
+      where: { id: contato.id },
+      data: { status: novoStatus, ...(motivo ? { erro: motivo } : {}) },
+    });
+
+    const contaComoEntregue = (novoStatus === 'entregue' || novoStatus === 'lido') && !['entregue', 'lido'].includes(contato.status);
+    const contaComoFalha = novoStatus === 'falha' && contato.status !== 'falha';
+    if (contaComoEntregue) {
+      await this.prisma.dmCampanha.update({ where: { id: contato.campanha_id }, data: { entregues: { increment: 1 } } });
+    } else if (contaComoFalha) {
+      await this.prisma.dmCampanha.update({ where: { id: contato.campanha_id }, data: { falhas: { increment: 1 } } });
     }
   }
 }

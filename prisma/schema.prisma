@@ -21,12 +21,6 @@ enum LeadStatus {
   finalizado
 }
 
-enum CampaignStatus {
-  pausado
-  rodando
-  concluido
-}
-
 enum SubscriptionStatus {
   ativo
   inativo
@@ -45,6 +39,23 @@ enum MessageDirection {
   saida
 }
 
+enum DmCampanhaStatus {
+  rascunho
+  agendada
+  em_andamento
+  concluida
+  pausada
+}
+
+enum DmContatoStatus {
+  pendente
+  enviando
+  enviado
+  entregue
+  lido
+  falha
+}
+
 model Tenant {
   id                  String             @id @default(uuid())
   nome_empresa        String
@@ -54,12 +65,12 @@ model Tenant {
   atualizado_em       DateTime           @updatedAt
 
   users               User[]
-  canais              Canal[]
   chatwoot_config     ChatwootConfig?
   leads               Lead[]
-  campanhas           CampanhaFila[]
   messages            Message[]
   etiquetas           Etiqueta[]
+  dm_canais           DmCanal[]
+  dm_campanhas        DmCampanha[]
 
   @@map("tenants")
 }
@@ -80,28 +91,6 @@ model User {
 
   @@unique([tenant_id, email])
   @@map("users")
-}
-
-model Canal {
-  id                    String   @id @default(uuid())
-  tenant_id             String
-  nome                  String
-  phone_number_id       String
-  waba_id               String
-  meta_access_token     String
-  template_boas_vindas  String?
-  chatwoot_inbox_id     Int?
-  ativo                 Boolean  @default(true)
-  criado_em             DateTime @default(now())
-  atualizado_em         DateTime @updatedAt
-
-  tenant                Tenant         @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
-  campanhas             CampanhaFila[]
-  messages              Message[]
-
-  @@index([tenant_id])
-  @@index([tenant_id, phone_number_id])
-  @@map("canais")
 }
 
 model ChatwootConfig {
@@ -147,7 +136,6 @@ model Lead {
   vendedor_id   String?
   disparado               Boolean    @default(false)
   iniciado_pelo_cliente   Boolean    @default(false)
-  campanha_id   String?
   last_message_at      DateTime?
   last_message_preview String?
   unread_count          Int       @default(0)
@@ -155,7 +143,6 @@ model Lead {
   atualizado_em DateTime   @updatedAt
 
   tenant        Tenant        @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
-  campanha      CampanhaFila? @relation(fields: [campanha_id], references: [id])
   etiqueta      Etiqueta?     @relation(fields: [etiqueta_id], references: [id], onDelete: SetNull)
   vendedor      User?         @relation("LeadVendedor", fields: [vendedor_id], references: [id], onDelete: SetNull)
   messages      Message[]
@@ -168,36 +155,11 @@ model Lead {
   @@map("leads")
 }
 
-model CampanhaFila {
-  id              String         @id @default(uuid())
-  tenant_id       String
-  canal_id        String?
-  nome_campanha   String
-  template_name   String
-  template_params Json?
-  image_url       String?
-  delay_segundos  Int            @default(60)
-  status          CampaignStatus @default(pausado)
-  total_leads     Int            @default(0)
-  enviados        Int            @default(0)
-  erros           Int            @default(0)
-  criado_em       DateTime       @default(now())
-  atualizado_em   DateTime       @updatedAt
-
-  tenant          Tenant         @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
-  canal           Canal?         @relation(fields: [canal_id], references: [id], onDelete: SetNull)
-  leads           Lead[]
-
-  @@index([tenant_id, status])
-  @@map("campanhas_filas")
-}
-
 model Message {
   id            String        @id @default(uuid())
   tenant_id     String
   canal_id      String?
   lead_id       Int
-  campanha_id   String?
   wamid         String?          @unique
   template_name String?
   direction     MessageDirection @default(saida)
@@ -208,11 +170,79 @@ model Message {
   atualizado_em DateTime      @updatedAt
 
   tenant        Tenant        @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
-  canal         Canal?        @relation(fields: [canal_id], references: [id], onDelete: SetNull)
   lead          Lead          @relation(fields: [lead_id], references: [id_number], onDelete: Cascade)
 
   @@index([lead_id])
   @@index([tenant_id])
   @@index([wamid])
   @@map("messages")
+}
+
+// ─── Disparo em Massa (canais oficiais Meta + campanhas em lote) ───────────
+
+model DmCanal {
+  id                String   @id @default(uuid())
+  tenant_id         String
+  nome              String
+  waba_id           String
+  phone_number_id   String
+  access_token      String
+  bm_nome           String?
+  lote_size         Int?
+  delay_ms          Int?
+  template_boas_vindas String?
+  chatwoot_inbox_id Int?
+  ativo             Boolean  @default(true)
+  criado_em         DateTime @default(now())
+
+  tenant     Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  campanhas  DmCampanha[]
+
+  @@index([tenant_id])
+  @@index([tenant_id, phone_number_id])
+  @@map("dm_canais")
+}
+
+model DmCampanha {
+  id                String            @id @default(uuid())
+  tenant_id         String
+  canal_id          String?
+  nome              String
+  template_name     String
+  template_params   Json?             @default("[]")
+  header_image_url  String?
+  status            DmCampanhaStatus  @default(rascunho)
+  agendado_para     DateTime?
+  total_contatos    Int               @default(0)
+  enviados          Int               @default(0)
+  entregues         Int               @default(0)
+  falhas            Int               @default(0)
+  criado_em         DateTime          @default(now())
+  iniciado_em       DateTime?
+
+  tenant    Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  canal     DmCanal?     @relation(fields: [canal_id], references: [id], onDelete: SetNull)
+  contatos  DmContato[]
+
+  @@index([tenant_id, status])
+  @@map("dm_campanhas")
+}
+
+model DmContato {
+  id           String           @id @default(uuid())
+  campanha_id  String
+  nome         String?
+  telefone     String
+  status       DmContatoStatus  @default(pendente)
+  enviado_em   DateTime?
+  erro         String?
+  message_id   String?
+  criado_em    DateTime         @default(now())
+
+  campanha  DmCampanha @relation(fields: [campanha_id], references: [id], onDelete: Cascade)
+
+  @@index([campanha_id])
+  @@index([campanha_id, status])
+  @@index([message_id])
+  @@map("dm_contatos")
 }
