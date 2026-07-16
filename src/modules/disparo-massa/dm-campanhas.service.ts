@@ -2,7 +2,7 @@ import { Injectable, Logger, NotFoundException, BadRequestException, OnModuleIni
 import { PrismaService } from '../../prisma/prisma.service';
 import { MetaService } from './meta.service';
 import { CreateDmCampanhaDto, PatchDmCampanhaDto } from './dto/dm-campanha.dto';
-import { DmContato, DmCanal } from '@prisma/client';
+import { DmContato, DmCanal, MessageDirection, MessageStatus } from '@prisma/client';
 
 const TAMANHO_LOTE_PADRAO = 10;
 const DELAY_MS_PADRAO = 300;
@@ -59,7 +59,12 @@ export class DmCampanhasService implements OnModuleInit {
 
     if (dto.contatos.length > 0) {
       await this.prisma.dmContato.createMany({
-        data: dto.contatos.map((c) => ({ campanha_id: campanha.id, nome: c.nome || null, telefone: c.telefone })),
+        data: dto.contatos.map((c) => ({
+          campanha_id: campanha.id,
+          nome: c.nome || null,
+          cpf: c.cpf ? c.cpf.replace(/\D/g, '') || null : null,
+          telefone: this.normalizeTelefone(c.telefone),
+        })),
       });
     }
 
@@ -177,6 +182,10 @@ export class DmCampanhasService implements OnModuleInit {
           where: { id: contato.id },
           data: { status: 'enviado', enviado_em: new Date(), message_id: resultado.value },
         });
+        // Gera/atualiza o lead e a mensagem no Chat assim que o disparo dá certo,
+        // pra não depender do cliente responder primeiro pra existir a conversa.
+        await this.sincronizarLead(campanha.tenant_id, contato, campanha, resultado.value)
+          .catch((e) => this.logger.error(`Falha ao sincronizar lead do contato ${contato.id}: ${e.message}`));
       } else {
         falhas++;
         await this.prisma.dmContato.update({
@@ -189,6 +198,80 @@ export class DmCampanhasService implements OnModuleInit {
       where: { id: campanhaId },
       data: { enviados: { increment: enviados }, falhas: { increment: falhas } },
     });
+  }
+
+  // Ponte entre o Disparo em Massa e o Chat: garante que, assim que uma
+  // mensagem de campanha é enviada com sucesso, exista um Lead com os dados
+  // completos (nome completo + CPF) e o histórico de mensagens já mostre o
+  // template enviado — sem isso, a conversa só apareceria no Chat quando (e
+  // se) o cliente respondesse.
+  private async sincronizarLead(
+    tenantId: string,
+    contato: DmContato,
+    campanha: { template_name: string },
+    wamid: string | null,
+  ) {
+    const preview = `Template: ${campanha.template_name}`;
+    let lead = await this.prisma.lead.findFirst({ where: { tenant_id: tenantId, telefone: contato.telefone } });
+
+    if (!lead) {
+      lead = await this.prisma.lead.create({
+        data: {
+          tenant_id: tenantId,
+          nome: contato.nome || `Contato ${contato.telefone}`,
+          telefone: contato.telefone,
+          cpf: contato.cpf || null,
+          disparado: true,
+          last_message_at: new Date(),
+          last_message_preview: preview,
+        },
+      }).catch(async (e) => {
+        // Corrida rara: CPF já usado por outro lead do tenant. Segue sem CPF
+        // em vez de derrubar o disparo do contato.
+        if (contato.cpf) {
+          return this.prisma.lead.create({
+            data: {
+              tenant_id: tenantId,
+              nome: contato.nome || `Contato ${contato.telefone}`,
+              telefone: contato.telefone,
+              disparado: true,
+              last_message_at: new Date(),
+              last_message_preview: preview,
+            },
+          });
+        }
+        throw e;
+      });
+    } else {
+      await this.prisma.lead.update({
+        where: { id_number: lead.id_number },
+        data: {
+          nome: contato.nome || lead.nome,
+          cpf: lead.cpf ?? contato.cpf ?? undefined,
+          disparado: true,
+          last_message_at: new Date(),
+          last_message_preview: preview,
+        },
+      }).catch(() => {});
+    }
+
+    await this.prisma.message.create({
+      data: {
+        tenant_id: tenantId,
+        lead_id: lead.id_number,
+        wamid: wamid || undefined,
+        template_name: campanha.template_name,
+        direction: MessageDirection.saida,
+        status: MessageStatus.enviado,
+      },
+    }).catch((e) => this.logger.error(`Falha ao registrar mensagem do lead ${lead!.id_number}: ${e.message}`));
+  }
+
+  private normalizeTelefone(telefone: string): string {
+    const digits = telefone.replace(/\D/g, '');
+    if (digits.startsWith('55') && (digits.length === 12 || digits.length === 13)) return digits;
+    if (digits.length === 10 || digits.length === 11) return '55' + digits;
+    return digits;
   }
 
   private sleep(ms: number) {

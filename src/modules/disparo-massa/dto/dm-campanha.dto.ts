@@ -7,6 +7,7 @@ import { DmCampanhaStatus } from '@prisma/client';
 
 export class ContatoCsvDto {
   @ApiPropertyOptional() @IsOptional() @IsString() nome?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() cpf?: string;
   @ApiProperty() @IsString() telefone: string;
 }
 

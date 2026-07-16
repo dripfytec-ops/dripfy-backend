@@ -232,6 +232,7 @@ model DmContato {
   id           String           @id @default(uuid())
   campanha_id  String
   nome         String?
+  cpf          String?
   telefone     String
   status       DmContatoStatus  @default(pendente)
   enviado_em   DateTime?
