@@ -164,6 +164,8 @@ model Message {
   template_name String?
   direction     MessageDirection @default(saida)
   content       String?
+  media_url       String?
+  media_mime_type String?
   status        MessageStatus    @default(enviado)
   erro_msg      String?
   criado_em     DateTime      @default(now())
