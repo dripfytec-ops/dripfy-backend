@@ -5,7 +5,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import { LeadsService } from './leads.service';
-import { UpdateLeadEtiquetaDto, AssignVendedorDto, FilterLeadsDto } from './dto/leads.dto';
+import { UpdateLeadEtiquetaDto, AssignVendedorDto, UpdateLeadDto, FilterLeadsDto } from './dto/leads.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -69,6 +69,16 @@ export class LeadsController {
   @Roles(UserRole.admin_master, UserRole.lojista_admin)
   listVendedores(@CurrentUser('tenant_id') tenantId: string) {
     return this.leadsService.listVendedores(tenantId);
+  }
+
+  @Patch(':id')
+  @ApiOperation({ summary: 'Atualiza dados do lead (nome, telefone, cpf)' })
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser('tenant_id') tenantId: string,
+    @Body() dto: UpdateLeadDto,
+  ) {
+    return this.leadsService.update(tenantId, id, dto);
   }
 
   @Patch(':id/etiqueta')

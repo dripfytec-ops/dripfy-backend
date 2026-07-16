@@ -1,7 +1,7 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import * as XLSX from 'xlsx';
 import { PrismaService } from '../../prisma/prisma.service';
-import { UpdateLeadEtiquetaDto, AssignVendedorDto, FilterLeadsDto } from './dto/leads.dto';
+import { UpdateLeadEtiquetaDto, AssignVendedorDto, UpdateLeadDto, FilterLeadsDto } from './dto/leads.dto';
 
 interface ParsedLead {
   nome: string;
@@ -164,6 +164,27 @@ export class LeadsService {
       data: { vendedor_id: dto.vendedor_id },
       include: LEAD_INCLUDE,
     });
+  }
+
+  async update(tenantId: string, leadId: number, dto: UpdateLeadDto) {
+    const lead = await this.prisma.lead.findFirst({ where: { id_number: leadId, tenant_id: tenantId } });
+    if (!lead) throw new NotFoundException('Lead não encontrado.');
+
+    const data: any = {};
+    if (dto.nome !== undefined) data.nome = dto.nome.trim();
+    if (dto.telefone !== undefined) data.telefone = this.normalizeTelefone(dto.telefone);
+    if (dto.cpf !== undefined) data.cpf = dto.cpf.trim() ? dto.cpf.replace(/\D/g, '') : null;
+
+    try {
+      return await this.prisma.lead.update({
+        where: { id_number: leadId },
+        data,
+        include: LEAD_INCLUDE,
+      });
+    } catch (e: any) {
+      if (e.code === 'P2002') throw new BadRequestException('Já existe outro lead com esse CPF.');
+      throw e;
+    }
   }
 
   async listVendedores(tenantId: string) {
