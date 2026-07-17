@@ -1,7 +1,9 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import * as XLSX from 'xlsx';
+import { MessageDirection, MessageStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
-import { UpdateLeadEtiquetaDto, AssignVendedorDto, UpdateLeadDto, FilterLeadsDto } from './dto/leads.dto';
+import { MetaService } from '../disparo-massa/meta.service';
+import { UpdateLeadEtiquetaDto, AssignVendedorDto, UpdateLeadDto, FilterLeadsDto, StartConversationDto } from './dto/leads.dto';
 
 interface ParsedLead {
   nome: string;
@@ -16,7 +18,7 @@ const LEAD_INCLUDE = {
 
 @Injectable()
 export class LeadsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private meta: MetaService) {}
 
   async uploadExcel(tenantId: string, file: Express.Multer.File) {
     console.log('UPLOAD recebido | arquivo:', file?.originalname, '| mimetype:', file?.mimetype, '| tamanho:', file?.size);
@@ -219,6 +221,73 @@ export class LeadsService {
       }
     }
     return { total: leads.length, inserted, skipped };
+  }
+
+  // Cria (ou reaproveita) um lead pelo telefone e dispara um template pra
+  // abrir a janela de 24h — é assim que se inicia conversa com um contato
+  // novo, já que texto livre só funciona depois que o cliente responde.
+  async startConversation(tenantId: string, dto: StartConversationDto) {
+    const canal = await this.prisma.dmCanal.findFirst({
+      where: { id: dto.canal_id, tenant_id: tenantId, ativo: true },
+    });
+    if (!canal) throw new NotFoundException('Canal não encontrado.');
+
+    const telefone = this.normalizeTelefone(dto.telefone);
+
+    let lead = await this.prisma.lead.findFirst({ where: { tenant_id: tenantId, telefone } });
+    if (!lead) {
+      const etiquetaPadrao = await this.prisma.etiqueta.findFirst({
+        where: { tenant_id: tenantId, slug: 'disparados' },
+      });
+      lead = await this.prisma.lead.create({
+        data: {
+          tenant_id: tenantId,
+          nome: dto.nome,
+          telefone,
+          cpf: dto.cpf || null,
+          etiqueta_id: etiquetaPadrao?.id || null,
+        },
+      });
+    }
+
+    let resultado: any;
+    try {
+      resultado = await this.meta.enviarTemplate({
+        phoneNumberId: canal.phone_number_id,
+        accessToken: canal.access_token,
+        telefone,
+        templateName: dto.template_name,
+        params: dto.template_params ?? [],
+      });
+    } catch (e: any) {
+      throw new BadRequestException(e.message || 'Erro ao enviar template.');
+    }
+
+    const wamid = resultado?.messages?.[0]?.id;
+
+    await this.prisma.$transaction([
+      this.prisma.message.create({
+        data: {
+          tenant_id: tenantId,
+          canal_id: canal.id,
+          lead_id: lead.id_number,
+          wamid,
+          direction: MessageDirection.saida,
+          template_name: dto.template_name,
+          status: MessageStatus.enviado,
+        },
+      }),
+      this.prisma.lead.update({
+        where: { id_number: lead.id_number },
+        data: {
+          disparado: true,
+          last_message_at: new Date(),
+          last_message_preview: `Template: ${dto.template_name}`,
+        },
+      }),
+    ]);
+
+    return this.prisma.lead.findUnique({ where: { id_number: lead.id_number }, include: LEAD_INCLUDE });
   }
 
   private normalizeTelefone(telefone: string): string {

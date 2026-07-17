@@ -1,4 +1,4 @@
-import { IsString, IsOptional } from 'class-validator';
+import { IsString, IsOptional, IsArray, IsNotEmpty } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class UpdateLeadEtiquetaDto {
@@ -27,6 +27,32 @@ export class UpdateLeadDto {
   @IsOptional()
   @IsString()
   cpf?: string;
+}
+
+export class StartConversationDto {
+  @IsString()
+  @IsNotEmpty()
+  nome: string;
+
+  @IsString()
+  @IsNotEmpty()
+  telefone: string;
+
+  @IsOptional()
+  @IsString()
+  cpf?: string;
+
+  @IsString()
+  @IsNotEmpty()
+  canal_id: string;
+
+  @IsString()
+  @IsNotEmpty()
+  template_name: string;
+
+  @IsOptional()
+  @IsArray()
+  template_params?: string[];
 }
 
 export class FilterLeadsDto {

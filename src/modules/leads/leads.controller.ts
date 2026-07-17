@@ -5,7 +5,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import { LeadsService } from './leads.service';
-import { UpdateLeadEtiquetaDto, AssignVendedorDto, UpdateLeadDto, FilterLeadsDto } from './dto/leads.dto';
+import { UpdateLeadEtiquetaDto, AssignVendedorDto, UpdateLeadDto, FilterLeadsDto, StartConversationDto } from './dto/leads.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -63,6 +63,15 @@ export class LeadsController {
   @Get('stats')
   stats(@CurrentUser('tenant_id') tenantId: string) {
     return this.leadsService.getStats(tenantId);
+  }
+
+  @Post('start-conversation')
+  @ApiOperation({ summary: 'Cria/reaproveita lead pelo telefone e dispara template pra abrir a conversa' })
+  startConversation(
+    @CurrentUser('tenant_id') tenantId: string,
+    @Body() dto: StartConversationDto,
+  ) {
+    return this.leadsService.startConversation(tenantId, dto);
   }
 
   @Get('vendedores')

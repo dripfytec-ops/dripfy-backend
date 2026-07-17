@@ -11,6 +11,7 @@ import { WebhookModule } from './modules/webhook/webhook.module';
 import { MessagesModule } from './modules/messages/messages.module';
 import { EtiquetasModule } from './modules/etiquetas/etiquetas.module';
 import { BmTokensModule } from './modules/bm-tokens/bm-tokens.module';
+import { QuickRepliesModule } from './modules/quick-replies/quick-replies.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { BmTokensModule } from './modules/bm-tokens/bm-tokens.module';
     MessagesModule,
     EtiquetasModule,
     BmTokensModule,
+    QuickRepliesModule,
   ],
 })
 export class AppModule {}

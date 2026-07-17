@@ -72,6 +72,7 @@ model Tenant {
   dm_canais           DmCanal[]
   dm_campanhas        DmCampanha[]
   bm_tokens           BmToken[]
+  quick_replies       QuickReply[]
 
   @@map("tenants")
 }
@@ -123,6 +124,20 @@ model Etiqueta {
   @@unique([tenant_id, slug])
   @@index([tenant_id, ordem])
   @@map("etiquetas")
+}
+
+model QuickReply {
+  id            String   @id @default(uuid())
+  tenant_id     String
+  titulo        String
+  texto         String
+  criado_em     DateTime @default(now())
+  atualizado_em DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id])
+  @@map("quick_replies")
 }
 
 model BmToken {

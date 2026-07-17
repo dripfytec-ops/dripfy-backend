@@ -7,6 +7,6 @@ import { MetaService } from './meta.service';
 @Module({
   controllers: [DisparoMassaController],
   providers: [DmCanaisService, DmCampanhasService, MetaService],
-  exports: [DmCanaisService],
+  exports: [DmCanaisService, MetaService],
 })
 export class DisparoMassaModule {}
