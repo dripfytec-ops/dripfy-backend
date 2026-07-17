@@ -2,8 +2,18 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ChatwootService } from '../chatwoot/chatwoot.service';
 import { DmCanaisService } from '../disparo-massa/dm-canais.service';
+import { MediaService } from './media.service';
 import { MessageStatus, MessageDirection, LeadStatus } from '@prisma/client';
 import axios from 'axios';
+
+const MEDIA_TYPES = ['image', 'audio', 'video', 'document', 'sticker'] as const;
+const MEDIA_LABEL: Record<string, string> = {
+  image: '📷 Imagem',
+  audio: '🎤 Áudio',
+  video: '🎥 Vídeo',
+  document: '📄 Documento',
+  sticker: '🌟 Figurinha',
+};
 
 @Injectable()
 export class WebhookService {
@@ -13,6 +23,7 @@ export class WebhookService {
     private prisma: PrismaService,
     private chatwootService: ChatwootService,
     private canaisService: DmCanaisService,
+    private mediaService: MediaService,
   ) {}
 
   async insertLeadAndFireImmediate(tenantSlug: string, data: { nome: string; telefone: string; cpf?: string }) {
@@ -131,8 +142,25 @@ export class WebhookService {
 
     for (const msg of messages) {
       const telefone = msg.from;
-      const texto = msg.text?.body || '[mídia]';
       const wamidEntrada = msg.id || null;
+
+      const tipoMidia = MEDIA_TYPES.find((t) => t === msg.type);
+      const midiaObj = tipoMidia ? msg[tipoMidia] : null;
+
+      let mediaUrl: string | null = null;
+      let mediaMimeType: string | null = null;
+      let texto = msg.text?.body || '';
+
+      if (midiaObj?.id && canal?.access_token) {
+        const baixada = await this.mediaService.downloadAndSave(midiaObj.id, canal.access_token);
+        if (baixada) {
+          mediaUrl = baixada.url;
+          mediaMimeType = baixada.mimeType;
+        }
+        texto = midiaObj.caption || MEDIA_LABEL[tipoMidia!] || '[mídia]';
+      } else if (!texto) {
+        texto = '[mídia]';
+      }
 
       this.logger.log(`Mensagem recebida de ${telefone} → "${texto}"`);
 
@@ -186,6 +214,8 @@ export class WebhookService {
           wamid: wamidEntrada,
           direction: MessageDirection.entrada,
           content: texto,
+          media_url: mediaUrl,
+          media_mime_type: mediaMimeType,
           status: MessageStatus.entregue,
         },
       });
