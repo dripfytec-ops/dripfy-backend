@@ -10,6 +10,7 @@ import { ChatwootModule } from './modules/chatwoot/chatwoot.module';
 import { WebhookModule } from './modules/webhook/webhook.module';
 import { MessagesModule } from './modules/messages/messages.module';
 import { EtiquetasModule } from './modules/etiquetas/etiquetas.module';
+import { BmTokensModule } from './modules/bm-tokens/bm-tokens.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { EtiquetasModule } from './modules/etiquetas/etiquetas.module';
     WebhookModule,
     MessagesModule,
     EtiquetasModule,
+    BmTokensModule,
   ],
 })
 export class AppModule {}

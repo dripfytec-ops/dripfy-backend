@@ -71,6 +71,7 @@ model Tenant {
   etiquetas           Etiqueta[]
   dm_canais           DmCanal[]
   dm_campanhas        DmCampanha[]
+  bm_tokens           BmToken[]
 
   @@map("tenants")
 }
@@ -122,6 +123,20 @@ model Etiqueta {
   @@unique([tenant_id, slug])
   @@index([tenant_id, ordem])
   @@map("etiquetas")
+}
+
+model BmToken {
+  id            String   @id @default(uuid())
+  tenant_id     String
+  nome          String
+  token         String
+  criado_em     DateTime @default(now())
+  atualizado_em DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id])
+  @@map("bm_tokens")
 }
 
 model Lead {
