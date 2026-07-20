@@ -2,6 +2,7 @@ import { Injectable, Logger, NotFoundException, BadRequestException, OnModuleIni
 import { PrismaService } from '../../prisma/prisma.service';
 import { MetaService } from './meta.service';
 import { CreateDmCampanhaDto, PatchDmCampanhaDto } from './dto/dm-campanha.dto';
+import { telefoneVariantes } from '../../common/utils/telefone.util';
 import { DmContato, DmCanal, MessageDirection, MessageStatus } from '@prisma/client';
 
 const TAMANHO_LOTE_PADRAO = 10;
@@ -212,7 +213,9 @@ export class DmCampanhasService implements OnModuleInit {
     wamid: string | null,
   ) {
     const preview = `Template: ${campanha.template_name}`;
-    let lead = await this.prisma.lead.findFirst({ where: { tenant_id: tenantId, telefone: contato.telefone } });
+    let lead = await this.prisma.lead.findFirst({
+      where: { tenant_id: tenantId, telefone: { in: telefoneVariantes(contato.telefone) } },
+    });
 
     if (!lead) {
       lead = await this.prisma.lead.create({

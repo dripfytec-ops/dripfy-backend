@@ -3,6 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { ChatwootService } from '../chatwoot/chatwoot.service';
 import { DmCanaisService } from '../disparo-massa/dm-canais.service';
 import { MediaService } from './media.service';
+import { telefoneVariantes } from '../../common/utils/telefone.util';
 import { MessageStatus, MessageDirection, LeadStatus } from '@prisma/client';
 import axios from 'axios';
 
@@ -164,9 +165,11 @@ export class WebhookService {
 
       this.logger.log(`Mensagem recebida de ${telefone} → "${texto}"`);
 
-      // Busca o lead mais antigo com esse telefone (evita duplicatas)
+      // Busca o lead mais antigo com esse telefone (evita duplicatas). Usa as
+      // variantes com/sem o 9º dígito porque a Meta nem sempre manda o wa_id
+      // no mesmo formato que foi salvo no disparo original.
       let lead = await this.prisma.lead.findFirst({
-        where: { tenant_id: tenant.id, telefone },
+        where: { tenant_id: tenant.id, telefone: { in: telefoneVariantes(telefone) } },
         orderBy: { criado_em: 'asc' },
       });
 

@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx';
 import { MessageDirection, MessageStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MetaService } from '../disparo-massa/meta.service';
+import { telefoneVariantes } from '../../common/utils/telefone.util';
 import { UpdateLeadEtiquetaDto, AssignVendedorDto, UpdateLeadDto, FilterLeadsDto, StartConversationDto } from './dto/leads.dto';
 
 interface ParsedLead {
@@ -175,7 +176,7 @@ export class LeadsService {
     const data: any = {};
     if (dto.nome !== undefined) data.nome = dto.nome.trim();
     if (dto.telefone !== undefined) data.telefone = this.normalizeTelefone(dto.telefone);
-    if (dto.cpf !== undefined) data.cpf = dto.cpf.trim() ? dto.cpf.replace(/\D/g, '') : null;
+    if (dto.cpf !== undefined) data.cpf = dto.cpf?.trim() ? dto.cpf.replace(/\D/g, '') : null;
 
     try {
       return await this.prisma.lead.update({
@@ -234,7 +235,9 @@ export class LeadsService {
 
     const telefone = this.normalizeTelefone(dto.telefone);
 
-    let lead = await this.prisma.lead.findFirst({ where: { tenant_id: tenantId, telefone } });
+    let lead = await this.prisma.lead.findFirst({
+      where: { tenant_id: tenantId, telefone: { in: telefoneVariantes(telefone) } },
+    });
     if (!lead) {
       const etiquetaPadrao = await this.prisma.etiqueta.findFirst({
         where: { tenant_id: tenantId, slug: 'disparados' },

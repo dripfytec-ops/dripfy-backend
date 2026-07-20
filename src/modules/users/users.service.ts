@@ -1,17 +1,33 @@
 import { Injectable, ConflictException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
+import { IsString, IsEmail, IsOptional, IsEnum, MinLength, IsNotEmpty } from 'class-validator';
 import { PrismaService } from '../../prisma/prisma.service';
 import { UserRole } from '@prisma/client';
 
 export class CreateUserDto {
+  @IsString()
+  @IsNotEmpty()
   nome: string;
+
+  @IsEmail()
   email: string;
+
+  @IsString()
+  @MinLength(6)
   password: string;
+
+  @IsEnum(UserRole)
   role: UserRole;
 }
 
 export class UpdateUserDto {
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
   nome?: string;
+
+  @IsOptional()
+  @IsEmail()
   email?: string;
 }
 
