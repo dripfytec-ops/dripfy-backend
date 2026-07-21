@@ -99,6 +99,7 @@ export class LeadsService {
     }
 
     if (filters.etiqueta_id) where.etiqueta_id = filters.etiqueta_id;
+    if (filters.origem_campanha_id) where.origem_campanha_id = filters.origem_campanha_id;
     if (filters.search) {
       where.OR = [
         { nome: { contains: filters.search, mode: 'insensitive' } },

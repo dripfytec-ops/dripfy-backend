@@ -68,6 +68,11 @@ export class FilterLeadsDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @IsString()
+  origem_campanha_id?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   page?: number;
 
   @ApiPropertyOptional()
