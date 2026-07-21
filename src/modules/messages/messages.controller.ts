@@ -1,5 +1,6 @@
-import { Controller, Get, Post, Delete, Param, Body, ParseIntPipe, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { Controller, Get, Post, Delete, Param, Body, ParseIntPipe, UseGuards, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import { MessagesService } from './messages.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -43,5 +44,17 @@ export class MessagesController {
     @Body('texto') texto: string,
   ) {
     return this.messagesService.reply(tenantId, leadId, texto);
+  }
+
+  @Post('reply-media/:leadId')
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Responder lead com áudio via WhatsApp (janela 24h)' })
+  replyMedia(
+    @CurrentUser('tenant_id') tenantId: string,
+    @Param('leadId', ParseIntPipe) leadId: number,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    return this.messagesService.replyMedia(tenantId, leadId, file);
   }
 }

@@ -1,11 +1,36 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { MediaService } from '../../common/media/media.service';
 import { MessageDirection, MessageStatus } from '@prisma/client';
 import axios from 'axios';
 
+const META_API = 'https://graph.facebook.com/v20.0';
+
 @Injectable()
 export class MessagesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private mediaService: MediaService) {}
+
+  private async findLeadECanal(tenantId: string, leadId: number) {
+    const lead = await this.prisma.lead.findFirst({ where: { id_number: leadId, tenant_id: tenantId } });
+    if (!lead) throw new NotFoundException('Lead não encontrado.');
+
+    const canal = await this.prisma.dmCanal.findFirst({ where: { tenant_id: tenantId, ativo: true } });
+    if (!canal) throw new NotFoundException('Nenhum canal WhatsApp ativo encontrado.');
+
+    return { lead, canal };
+  }
+
+  private lancarErroMeta(error: any): never {
+    const metaError = error?.response?.data?.error;
+    // Código 131047 = fora da janela de 24h de atendimento
+    if (metaError?.code === 131047 || metaError?.code === 130472) {
+      throw new BadRequestException(
+        'Fora da janela de 24h. O cliente precisa enviar uma mensagem primeiro para você poder responder.',
+      );
+    }
+    const msg = metaError?.message || error.message;
+    throw new BadRequestException(`Erro ao enviar mensagem: ${msg}`);
+  }
 
   async getByLead(tenantId: string, leadId: number) {
     return this.prisma.message.findMany({
@@ -32,19 +57,11 @@ export class MessagesService {
   }
 
   async reply(tenantId: string, leadId: number, texto: string) {
-    const lead = await this.prisma.lead.findFirst({
-      where: { id_number: leadId, tenant_id: tenantId },
-    });
-    if (!lead) throw new NotFoundException('Lead não encontrado.');
-
-    const canal = await this.prisma.dmCanal.findFirst({
-      where: { tenant_id: tenantId, ativo: true },
-    });
-    if (!canal) throw new NotFoundException('Nenhum canal WhatsApp ativo encontrado.');
+    const { lead, canal } = await this.findLeadECanal(tenantId, leadId);
 
     try {
       const response = await axios.post(
-        `https://graph.facebook.com/v20.0/${canal.phone_number_id}/messages`,
+        `${META_API}/${canal.phone_number_id}/messages`,
         {
           messaging_product: 'whatsapp',
           to: lead.telefone,
@@ -79,15 +96,58 @@ export class MessagesService {
 
       return message;
     } catch (error: any) {
-      const metaError = error?.response?.data?.error;
-      // Código 131047 = fora da janela de 24h de atendimento
-      if (metaError?.code === 131047 || metaError?.code === 130472) {
-        throw new BadRequestException(
-          'Fora da janela de 24h. O cliente precisa enviar uma mensagem primeiro para você poder responder com texto livre.',
-        );
-      }
-      const msg = metaError?.message || error.message;
-      throw new BadRequestException(`Erro ao enviar mensagem: ${msg}`);
+      this.lancarErroMeta(error);
+    }
+  }
+
+  // Envia áudio (nota de voz gravada no navegador ou arquivo anexado). Salva
+  // uma cópia no volume de mídia e manda a Meta buscar por "link" — evita o
+  // passo extra de upload direto pra Meta e reaproveita o /media já público.
+  async replyMedia(tenantId: string, leadId: number, file: Express.Multer.File) {
+    const { lead, canal } = await this.findLeadECanal(tenantId, leadId);
+    if (!file) throw new BadRequestException('Nenhum arquivo enviado.');
+
+    const relativeUrl = this.mediaService.saveBuffer(file.buffer, file.mimetype);
+    const publicUrl = this.mediaService.publicUrl(relativeUrl);
+
+    try {
+      const response = await axios.post(
+        `${META_API}/${canal.phone_number_id}/messages`,
+        {
+          messaging_product: 'whatsapp',
+          to: lead.telefone,
+          type: 'audio',
+          audio: { link: publicUrl },
+        },
+        { headers: { Authorization: `Bearer ${canal.access_token}` } },
+      );
+
+      const wamid = response.data?.messages?.[0]?.id;
+      const preview = '🎤 Áudio';
+
+      const [message] = await this.prisma.$transaction([
+        this.prisma.message.create({
+          data: {
+            tenant_id: tenantId,
+            canal_id: canal.id,
+            lead_id: leadId,
+            direction: MessageDirection.saida,
+            content: preview,
+            media_url: relativeUrl,
+            media_mime_type: file.mimetype,
+            wamid,
+            status: MessageStatus.enviado,
+          },
+        }),
+        this.prisma.lead.update({
+          where: { id_number: leadId },
+          data: { last_message_at: new Date(), last_message_preview: preview },
+        }),
+      ]);
+
+      return message;
+    } catch (error: any) {
+      this.lancarErroMeta(error);
     }
   }
 }

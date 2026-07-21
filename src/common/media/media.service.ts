@@ -12,9 +12,11 @@ const EXT_BY_MIME: Record<string, string> = {
   'video/mp4': 'mp4',
   'video/3gpp': '3gp',
   'audio/ogg': 'ogg',
+  'audio/ogg; codecs=opus': 'ogg',
   'audio/mpeg': 'mp3',
   'audio/mp4': 'm4a',
   'audio/amr': 'amr',
+  'audio/webm': 'webm',
   'application/pdf': 'pdf',
 };
 
@@ -42,14 +44,28 @@ export class MediaService {
         responseType: 'arraybuffer',
       });
 
-      const ext = EXT_BY_MIME[mimeType] || (mimeType?.split('/')?.[1] ?? 'bin');
-      const filename = `${randomUUID()}.${ext}`;
-      fs.writeFileSync(path.join(this.mediaDir, filename), fileRes.data);
-
-      return { url: `/media/${filename}`, mimeType };
+      return { url: this.saveBuffer(fileRes.data, mimeType), mimeType };
     } catch (e: any) {
       this.logger.error(`Falha ao baixar mídia ${mediaId}: ${e.message}`);
       return null;
     }
+  }
+
+  // Salva um buffer (ex: áudio gravado no navegador, antes de mandar pra
+  // Meta) direto no volume. Retorna a URL pública relativa.
+  saveBuffer(buffer: Buffer, mimeType: string): string {
+    const ext = EXT_BY_MIME[mimeType] || (mimeType?.split('/')?.[1]?.split(';')?.[0] ?? 'bin');
+    const filename = `${randomUUID()}.${ext}`;
+    fs.writeFileSync(path.join(this.mediaDir, filename), buffer);
+    return `/media/${filename}`;
+  }
+
+  // Monta a URL pública completa (host do backend + caminho relativo) pra
+  // mandar como "link" na API da Meta, que baixa o arquivo direto de lá.
+  publicUrl(relativeUrl: string): string {
+    const host = process.env.BACKEND_PUBLIC_URL
+      || (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : null)
+      || 'http://localhost:3001';
+    return host.replace(/\/$/, '') + relativeUrl;
   }
 }
