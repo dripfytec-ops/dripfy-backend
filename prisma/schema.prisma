@@ -169,12 +169,15 @@ model Lead {
   last_message_at      DateTime?
   last_message_preview String?
   unread_count          Int       @default(0)
+  origem_campanha_id    String?
+  origem_campanha_nome  String?
   criado_em     DateTime   @default(now())
   atualizado_em DateTime   @updatedAt
 
   tenant        Tenant        @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   etiqueta      Etiqueta?     @relation(fields: [etiqueta_id], references: [id], onDelete: SetNull)
   vendedor      User?         @relation("LeadVendedor", fields: [vendedor_id], references: [id], onDelete: SetNull)
+  origem_campanha DmCampanha? @relation(fields: [origem_campanha_id], references: [id], onDelete: SetNull)
   messages      Message[]
 
   @@unique([tenant_id, cpf])
@@ -255,6 +258,7 @@ model DmCampanha {
   tenant    Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   canal     DmCanal?     @relation(fields: [canal_id], references: [id], onDelete: SetNull)
   contatos  DmContato[]
+  leads_origem Lead[]
 
   @@index([tenant_id, status])
   @@map("dm_campanhas")

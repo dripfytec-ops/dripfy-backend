@@ -209,7 +209,7 @@ export class DmCampanhasService implements OnModuleInit {
   private async sincronizarLead(
     tenantId: string,
     contato: DmContato,
-    campanha: { template_name: string },
+    campanha: { id: string; nome: string; template_name: string },
     wamid: string | null,
   ) {
     const preview = `Template: ${campanha.template_name}`;
@@ -227,6 +227,8 @@ export class DmCampanhasService implements OnModuleInit {
           disparado: true,
           last_message_at: new Date(),
           last_message_preview: preview,
+          origem_campanha_id: campanha.id,
+          origem_campanha_nome: campanha.nome,
         },
       }).catch(async (e) => {
         // Corrida rara: CPF já usado por outro lead do tenant. Segue sem CPF
@@ -240,6 +242,8 @@ export class DmCampanhasService implements OnModuleInit {
               disparado: true,
               last_message_at: new Date(),
               last_message_preview: preview,
+              origem_campanha_id: campanha.id,
+              origem_campanha_nome: campanha.nome,
             },
           });
         }
@@ -254,6 +258,9 @@ export class DmCampanhasService implements OnModuleInit {
           disparado: true,
           last_message_at: new Date(),
           last_message_preview: preview,
+          // Carimbo de origem é fixo: só grava se o lead ainda não tinha uma
+          // campanha de origem (ex: foi criado antes por resposta espontânea).
+          ...(lead.origem_campanha_id ? {} : { origem_campanha_id: campanha.id, origem_campanha_nome: campanha.nome }),
         },
       }).catch(() => {});
     }
