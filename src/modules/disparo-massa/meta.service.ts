@@ -1,5 +1,6 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import axios from 'axios';
+import FormData = require('form-data');
 
 const API_VERSION = process.env.META_API_VERSION || 'v20.0';
 const BASE_URL = `https://graph.facebook.com/${API_VERSION}`;
@@ -53,6 +54,28 @@ export class MetaService {
       return data.data || [];
     } catch (e: any) {
       throw new BadRequestException(e.response?.data?.error?.message || 'Erro ao buscar templates');
+    }
+  }
+
+  // Upload direto de mídia (recomendado pela própria Meta em vez de "link"):
+  // envia os bytes pra Meta agora e retorna um media_id, que não depende do
+  // nosso servidor estar disponível quando o destinatário abrir a mensagem.
+  async uploadMedia({
+    phoneNumberId, accessToken, buffer, mimeType, filename,
+  }: {
+    phoneNumberId: string; accessToken: string; buffer: Buffer; mimeType: string; filename: string;
+  }): Promise<string> {
+    const form = new FormData();
+    form.append('messaging_product', 'whatsapp');
+    form.append('file', buffer, { filename, contentType: mimeType });
+
+    try {
+      const { data } = await axios.post(`${BASE_URL}/${phoneNumberId}/media`, form, {
+        headers: { Authorization: `Bearer ${accessToken}`, ...form.getHeaders() },
+      });
+      return data.id;
+    } catch (e: any) {
+      throw new BadRequestException(e.response?.data?.error?.message || 'Erro ao enviar mídia pra Meta');
     }
   }
 

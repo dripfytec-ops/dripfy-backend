@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MediaService } from '../../common/media/media.service';
+import { MetaService } from '../disparo-massa/meta.service';
 import { MessageDirection, MessageStatus } from '@prisma/client';
 import axios from 'axios';
 
@@ -8,7 +9,7 @@ const META_API = 'https://graph.facebook.com/v20.0';
 
 @Injectable()
 export class MessagesService {
-  constructor(private prisma: PrismaService, private mediaService: MediaService) {}
+  constructor(private prisma: PrismaService, private mediaService: MediaService, private metaService: MetaService) {}
 
   private async findLeadECanal(tenantId: string, leadId: number) {
     const lead = await this.prisma.lead.findFirst({ where: { id_number: leadId, tenant_id: tenantId } });
@@ -100,9 +101,13 @@ export class MessagesService {
     }
   }
 
-  // Envia áudio (nota de voz gravada no navegador ou arquivo anexado). Salva
-  // uma cópia no volume de mídia e manda a Meta buscar por "link" — evita o
-  // passo extra de upload direto pra Meta e reaproveita o /media já público.
+  // Envia áudio (nota de voz gravada no navegador ou arquivo anexado). Sobe
+  // os bytes direto pra Meta (recomendado por eles) em vez de mandar um
+  // "link" — enviar por link depende da Meta conseguir buscar no nosso
+  // servidor de forma assíncrona, e quando essa busca falha a mensagem
+  // ainda aparece como "enviada" pro nosso lado, mas o áudio nunca fica
+  // disponível de verdade pro destinatário ("Este áudio não está mais
+  // disponível"). Upload direto elimina essa dependência.
   async replyMedia(tenantId: string, leadId: number, file: Express.Multer.File) {
     const { lead, canal } = await this.findLeadECanal(tenantId, leadId);
     if (!file) throw new BadRequestException('Nenhum arquivo enviado.');
@@ -116,17 +121,25 @@ export class MessagesService {
       mimeType = 'audio/ogg';
     }
 
+    // Guarda uma cópia local só pra exibir no histórico do nosso Chat.
     const relativeUrl = this.mediaService.saveBuffer(buffer, mimeType);
-    const publicUrl = this.mediaService.publicUrl(relativeUrl);
 
     try {
+      const mediaId = await this.metaService.uploadMedia({
+        phoneNumberId: canal.phone_number_id,
+        accessToken: canal.access_token,
+        buffer,
+        mimeType,
+        filename: `audio.${mimeType.includes('ogg') ? 'ogg' : 'm4a'}`,
+      });
+
       const response = await axios.post(
         `${META_API}/${canal.phone_number_id}/messages`,
         {
           messaging_product: 'whatsapp',
           to: lead.telefone,
           type: 'audio',
-          audio: { link: publicUrl },
+          audio: { id: mediaId },
         },
         { headers: { Authorization: `Bearer ${canal.access_token}` } },
       );
