@@ -26,14 +26,14 @@ export class DmCampanhasService implements OnModuleInit {
     return this.prisma.dmCampanha.findMany({
       where: { tenant_id: tenantId },
       orderBy: { criado_em: 'desc' },
-      include: { canal: { select: { id: true, nome: true } } },
+      include: { canal: { select: { id: true, nome: true } }, vendedor: { select: { id: true, nome: true } } },
     });
   }
 
   async getOne(tenantId: string, id: string) {
     const campanha = await this.prisma.dmCampanha.findFirst({
       where: { id, tenant_id: tenantId },
-      include: { canal: { select: { id: true, nome: true } } },
+      include: { canal: { select: { id: true, nome: true } }, vendedor: { select: { id: true, nome: true } } },
     });
     if (!campanha) throw new NotFoundException('Campanha não encontrada.');
     const contatos = await this.prisma.dmContato.findMany({ where: { campanha_id: id }, orderBy: { criado_em: 'asc' } });
@@ -44,10 +44,18 @@ export class DmCampanhasService implements OnModuleInit {
     const canal = await this.prisma.dmCanal.findFirst({ where: { id: dto.canal_id, tenant_id: tenantId } });
     if (!canal) throw new BadRequestException('Canal não encontrado.');
 
+    if (dto.vendedor_id) {
+      const vendedor = await this.prisma.user.findFirst({
+        where: { id: dto.vendedor_id, tenant_id: tenantId, role: 'atendente' },
+      });
+      if (!vendedor) throw new BadRequestException('Vendedor não encontrado.');
+    }
+
     const campanha = await this.prisma.dmCampanha.create({
       data: {
         tenant_id: tenantId,
         canal_id: dto.canal_id,
+        vendedor_id: dto.vendedor_id || null,
         nome: dto.nome,
         template_name: dto.template_name,
         template_params: dto.template_params ?? [],
@@ -209,7 +217,7 @@ export class DmCampanhasService implements OnModuleInit {
   private async sincronizarLead(
     tenantId: string,
     contato: DmContato,
-    campanha: { id: string; nome: string; template_name: string },
+    campanha: { id: string; nome: string; template_name: string; vendedor_id: string | null },
     wamid: string | null,
   ) {
     const preview = `Template: ${campanha.template_name}`;
@@ -229,6 +237,7 @@ export class DmCampanhasService implements OnModuleInit {
           last_message_preview: preview,
           origem_campanha_id: campanha.id,
           origem_campanha_nome: campanha.nome,
+          vendedor_id: campanha.vendedor_id,
         },
       }).catch(async (e) => {
         // Corrida rara: CPF já usado por outro lead do tenant. Segue sem CPF
@@ -244,6 +253,7 @@ export class DmCampanhasService implements OnModuleInit {
               last_message_preview: preview,
               origem_campanha_id: campanha.id,
               origem_campanha_nome: campanha.nome,
+              vendedor_id: campanha.vendedor_id,
             },
           });
         }
@@ -261,6 +271,9 @@ export class DmCampanhasService implements OnModuleInit {
           // Carimbo de origem é fixo: só grava se o lead ainda não tinha uma
           // campanha de origem (ex: foi criado antes por resposta espontânea).
           ...(lead.origem_campanha_id ? {} : { origem_campanha_id: campanha.id, origem_campanha_nome: campanha.nome }),
+          // Só atribui o vendedor exclusivo da campanha se o lead ainda não
+          // tinha vendedor — não sobrescreve uma atribuição manual existente.
+          ...(lead.vendedor_id || !campanha.vendedor_id ? {} : { vendedor_id: campanha.vendedor_id }),
         },
       }).catch(() => {});
     }

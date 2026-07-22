@@ -18,6 +18,7 @@ export class CreateDmCampanhaDto {
   @ApiPropertyOptional({ type: [String] }) @IsOptional() @IsArray() template_params?: string[];
   @ApiPropertyOptional() @IsOptional() @IsString() header_image_url?: string;
   @ApiPropertyOptional() @IsOptional() @IsDateString() agendado_para?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() vendedor_id?: string;
 
   @ApiProperty({ type: [ContatoCsvDto] })
   @IsArray()

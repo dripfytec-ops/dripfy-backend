@@ -90,6 +90,7 @@ model User {
 
   tenant          Tenant    @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   leads_vendedor  Lead[]    @relation("LeadVendedor")
+  campanhas_vendedor DmCampanha[] @relation("DmCampanhaVendedor")
 
   @@unique([tenant_id, email])
   @@map("users")
@@ -242,6 +243,7 @@ model DmCampanha {
   id                String            @id @default(uuid())
   tenant_id         String
   canal_id          String?
+  vendedor_id       String?
   nome              String
   template_name     String
   template_params   Json?             @default("[]")
@@ -257,6 +259,7 @@ model DmCampanha {
 
   tenant    Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   canal     DmCanal?     @relation(fields: [canal_id], references: [id], onDelete: SetNull)
+  vendedor  User?        @relation("DmCampanhaVendedor", fields: [vendedor_id], references: [id], onDelete: SetNull)
   contatos  DmContato[]
   leads_origem Lead[]
 
