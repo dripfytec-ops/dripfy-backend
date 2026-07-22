@@ -92,21 +92,28 @@ export class LeadsService {
     const skip = (page - 1) * limit;
 
     const where: any = { tenant_id: tenantId };
+    const and: any[] = [];
 
-    // Vendedor só vê seus próprios leads
+    // Vendedor vê os leads já atribuídos a ele + os que ainda não têm
+    // vendedor (balcão compartilhado) — só não vê os atribuídos a outro
+    // vendedor.
     if (userRole === 'atendente' && userId) {
-      where.vendedor_id = userId;
+      and.push({ OR: [{ vendedor_id: userId }, { vendedor_id: null }] });
     }
 
     if (filters.etiqueta_id) where.etiqueta_id = filters.etiqueta_id;
     if (filters.origem_campanha_id) where.origem_campanha_id = filters.origem_campanha_id;
     if (filters.search) {
-      where.OR = [
-        { nome: { contains: filters.search, mode: 'insensitive' } },
-        { cpf: { contains: filters.search } },
-        { telefone: { contains: filters.search } },
-      ];
+      and.push({
+        OR: [
+          { nome: { contains: filters.search, mode: 'insensitive' } },
+          { cpf: { contains: filters.search } },
+          { telefone: { contains: filters.search } },
+        ],
+      });
     }
+
+    if (and.length) where.AND = and;
 
     const orderBy =
       filters.sort === 'recent'
@@ -148,7 +155,7 @@ export class LeadsService {
 
   async updateEtiqueta(tenantId: string, leadId: number, dto: UpdateLeadEtiquetaDto, userId?: string, userRole?: string) {
     const where: any = { id_number: leadId, tenant_id: tenantId };
-    if (userRole === 'atendente' && userId) where.vendedor_id = userId;
+    if (userRole === 'atendente' && userId) where.OR = [{ vendedor_id: userId }, { vendedor_id: null }];
 
     const lead = await this.prisma.lead.findFirst({ where });
     if (!lead) throw new NotFoundException('Lead não encontrado.');
