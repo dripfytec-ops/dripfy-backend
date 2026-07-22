@@ -107,7 +107,16 @@ export class MessagesService {
     const { lead, canal } = await this.findLeadECanal(tenantId, leadId);
     if (!file) throw new BadRequestException('Nenhum arquivo enviado.');
 
-    const relativeUrl = this.mediaService.saveBuffer(file.buffer, file.mimetype);
+    // O navegador grava em webm/opus, que a Meta rejeita ("Media upload
+    // error") — reempacota pra ogg/opus antes de salvar e enviar.
+    let buffer = file.buffer;
+    let mimeType = file.mimetype;
+    if (mimeType.includes('webm')) {
+      buffer = await this.mediaService.convertToOggOpus(file.buffer);
+      mimeType = 'audio/ogg';
+    }
+
+    const relativeUrl = this.mediaService.saveBuffer(buffer, mimeType);
     const publicUrl = this.mediaService.publicUrl(relativeUrl);
 
     try {
@@ -134,7 +143,7 @@ export class MessagesService {
             direction: MessageDirection.saida,
             content: preview,
             media_url: relativeUrl,
-            media_mime_type: file.mimetype,
+            media_mime_type: mimeType,
             wamid,
             status: MessageStatus.enviado,
           },

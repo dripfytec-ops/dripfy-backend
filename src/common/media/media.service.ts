@@ -1,8 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import axios from 'axios';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
+import ffmpeg from 'fluent-ffmpeg';
+import ffmpegPath from '@ffmpeg-installer/ffmpeg';
+
+ffmpeg.setFfmpegPath(ffmpegPath.path);
 
 const EXT_BY_MIME: Record<string, string> = {
   'image/jpeg': 'jpg',
@@ -58,6 +63,32 @@ export class MediaService {
     const filename = `${randomUUID()}.${ext}`;
     fs.writeFileSync(path.join(this.mediaDir, filename), buffer);
     return `/media/${filename}`;
+  }
+
+  // O navegador grava em webm/opus, mas a WhatsApp Cloud API só aceita áudio
+  // em ogg (só codec opus), aac, mp4, mpeg ou amr — webm dá "Media upload
+  // error" na Meta. Reempacota o mesmo áudio opus num container ogg (rápido,
+  // sem perda de qualidade real).
+  async convertToOggOpus(buffer: Buffer): Promise<Buffer> {
+    const tmpIn = path.join(os.tmpdir(), `${randomUUID()}.webm`);
+    const tmpOut = path.join(os.tmpdir(), `${randomUUID()}.ogg`);
+    fs.writeFileSync(tmpIn, buffer);
+
+    try {
+      await new Promise<void>((resolve, reject) => {
+        ffmpeg(tmpIn)
+          .audioCodec('libopus')
+          .audioChannels(1)
+          .format('ogg')
+          .on('error', reject)
+          .on('end', () => resolve())
+          .save(tmpOut);
+      });
+      return fs.readFileSync(tmpOut);
+    } finally {
+      fs.rmSync(tmpIn, { force: true });
+      fs.rmSync(tmpOut, { force: true });
+    }
   }
 
   // Monta a URL pública completa (host do backend + caminho relativo) pra
