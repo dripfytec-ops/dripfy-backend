@@ -150,13 +150,18 @@ export class WebhookService {
 
       let mediaUrl: string | null = null;
       let mediaMimeType: string | null = null;
-      // Resposta de botão de um template (ex: "Sim"/"Não") ou de mensagem
-      // interativa (lista/botões) — sem isso, cai no fallback de mídia e
-      // aparece "[mídia]" no Chat mesmo não sendo imagem/áudio/documento.
+      // Resposta de botão de um template (ex: "Sim"/"Não"), de mensagem
+      // interativa (lista/botões), reação com emoji, localização ou contato
+      // compartilhado — sem isso, tudo isso caía no fallback genérico
+      // "[mídia]" mesmo não sendo imagem/áudio/documento de verdade.
       let texto = msg.text?.body
         || msg.button?.text
         || msg.interactive?.button_reply?.title
         || msg.interactive?.list_reply?.title
+        || (msg.type === 'reaction' ? (msg.reaction?.emoji ? `Reagiu: ${msg.reaction.emoji}` : 'Removeu a reação') : '')
+        || (msg.type === 'location' ? '📍 Localização' : '')
+        || (msg.type === 'contacts' ? `👤 Contato: ${msg.contacts?.[0]?.name?.formatted_name || 'compartilhado'}` : '')
+        || (msg.type === 'unsupported' ? '⚠️ Tipo de mensagem não suportado pelo WhatsApp' : '')
         || '';
 
       if (midiaObj?.id && canal?.access_token) {
@@ -167,6 +172,9 @@ export class WebhookService {
         }
         texto = midiaObj.caption || MEDIA_LABEL[tipoMidia!] || '[mídia]';
       } else if (!texto) {
+        // Tipo de mensagem que ainda não reconhecemos — loga o payload bruto
+        // pra dar pra diagnosticar e adicionar suporte depois.
+        this.logger.warn(`Tipo de mensagem não tratado (${msg.type}): ${JSON.stringify(msg)}`);
         texto = '[mídia]';
       }
 
