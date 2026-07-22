@@ -150,7 +150,14 @@ export class WebhookService {
 
       let mediaUrl: string | null = null;
       let mediaMimeType: string | null = null;
-      let texto = msg.text?.body || '';
+      // Resposta de botão de um template (ex: "Sim"/"Não") ou de mensagem
+      // interativa (lista/botões) — sem isso, cai no fallback de mídia e
+      // aparece "[mídia]" no Chat mesmo não sendo imagem/áudio/documento.
+      let texto = msg.text?.body
+        || msg.button?.text
+        || msg.interactive?.button_reply?.title
+        || msg.interactive?.list_reply?.title
+        || '';
 
       if (midiaObj?.id && canal?.access_token) {
         const baixada = await this.mediaService.downloadAndSave(midiaObj.id, canal.access_token);
