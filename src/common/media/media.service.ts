@@ -4,10 +4,10 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
-import ffmpeg from 'fluent-ffmpeg';
-import ffmpegPath from '@ffmpeg-installer/ffmpeg';
+import ffmpeg = require('fluent-ffmpeg');
+import ffmpegInstaller = require('@ffmpeg-installer/ffmpeg');
 
-ffmpeg.setFfmpegPath(ffmpegPath.path);
+ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
 const EXT_BY_MIME: Record<string, string> = {
   'image/jpeg': 'jpg',
