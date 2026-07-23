@@ -103,6 +103,7 @@ export class LeadsService {
 
     if (filters.etiqueta_id) where.etiqueta_id = filters.etiqueta_id;
     if (filters.origem_campanha_id) where.origem_campanha_id = filters.origem_campanha_id;
+    if (filters.vendedor_id) where.vendedor_id = filters.vendedor_id;
     if (filters.search) {
       and.push({
         OR: [

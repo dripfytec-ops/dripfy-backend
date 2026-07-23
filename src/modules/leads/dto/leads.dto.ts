@@ -73,6 +73,11 @@ export class FilterLeadsDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @IsString()
+  vendedor_id?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   page?: number;
 
   @ApiPropertyOptional()
