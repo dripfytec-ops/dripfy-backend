@@ -52,7 +52,6 @@ export class EtiquetasService {
     if (etiqueta.slug === 'disparados' || etiqueta.slug === 'responderam') {
       throw new NotFoundException('As colunas "Disparados" e "Responderam" não podem ser removidas.');
     }
-    await this.prisma.lead.updateMany({ where: { etiqueta_id: id }, data: { etiqueta_id: null } });
     return this.prisma.etiqueta.delete({ where: { id } });
   }
 

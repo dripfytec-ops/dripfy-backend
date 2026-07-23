@@ -4,7 +4,7 @@ import { MessageDirection, MessageStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MetaService } from '../disparo-massa/meta.service';
 import { telefoneVariantes } from '../../common/utils/telefone.util';
-import { UpdateLeadEtiquetaDto, AssignVendedorDto, UpdateLeadDto, FilterLeadsDto, StartConversationDto } from './dto/leads.dto';
+import { SetEtiquetasDto, AssignVendedorDto, UpdateLeadDto, FilterLeadsDto, StartConversationDto } from './dto/leads.dto';
 
 interface ParsedLead {
   nome: string;
@@ -12,8 +12,10 @@ interface ParsedLead {
   cpf?: string;
 }
 
+const ETIQUETA_SELECT = { id: true, nome: true, cor_hexadecimal: true, slug: true };
+
 const LEAD_INCLUDE = {
-  etiqueta: { select: { id: true, nome: true, cor_hexadecimal: true, slug: true } },
+  etiquetas: { select: ETIQUETA_SELECT, orderBy: { ordem: 'asc' as const } },
   vendedor: { select: { id: true, nome: true } },
 };
 
@@ -74,7 +76,7 @@ export class LeadsService {
             nome: lead.nome,
             telefone: this.normalizeTelefone(lead.telefone),
             cpf: lead.cpf || null,
-            etiqueta_id: etiquetaPadrao?.id || null,
+            etiquetas: etiquetaPadrao ? { connect: [{ id: etiquetaPadrao.id }] } : undefined,
           },
         });
         inserted++;
@@ -101,7 +103,7 @@ export class LeadsService {
       and.push({ OR: [{ vendedor_id: userId }, { vendedor_id: null }] });
     }
 
-    if (filters.etiqueta_id) where.etiqueta_id = filters.etiqueta_id;
+    if (filters.etiqueta_id) where.etiquetas = { some: { id: filters.etiqueta_id } };
     if (filters.origem_campanha_id) where.origem_campanha_id = filters.origem_campanha_id;
     if (filters.vendedor_id) where.vendedor_id = filters.vendedor_id;
     if (filters.search) {
@@ -147,34 +149,89 @@ export class LeadsService {
     const [total, disparados, emAtendimento, mensagens] = await this.prisma.$transaction([
       this.prisma.lead.count({ where: { tenant_id: tenantId } }),
       this.prisma.lead.count({ where: { tenant_id: tenantId, disparado: true } }),
-      this.prisma.lead.count({ where: { tenant_id: tenantId, ...(etAtendimento ? { etiqueta_id: etAtendimento.id } : {}) } }),
+      this.prisma.lead.count({ where: { tenant_id: tenantId, ...(etAtendimento ? { etiquetas: { some: { id: etAtendimento.id } } } : {}) } }),
       this.prisma.message.count({ where: { tenant_id: tenantId } }),
     ]);
 
     return { total, disparados, emAtendimento, mensagens };
   }
 
-  async updateEtiqueta(tenantId: string, leadId: number, dto: UpdateLeadEtiquetaDto, userId?: string, userRole?: string) {
+  async setEtiquetas(tenantId: string, leadId: number, dto: SetEtiquetasDto, userId?: string, userRole?: string, userName?: string) {
     const where: any = { id_number: leadId, tenant_id: tenantId };
     if (userRole === 'atendente' && userId) where.OR = [{ vendedor_id: userId }, { vendedor_id: null }];
+
+    const lead = await this.prisma.lead.findFirst({ where, include: { etiquetas: { select: { id: true } } } });
+    if (!lead) throw new NotFoundException('Lead não encontrado.');
+
+    const idsAtuais = new Set(lead.etiquetas.map((e) => e.id));
+    const idsAdicionados = dto.etiqueta_ids.filter((id) => !idsAtuais.has(id));
+
+    const updated = await this.prisma.lead.update({
+      where: { id_number: leadId },
+      data: { etiquetas: { set: dto.etiqueta_ids.map((id) => ({ id })) } },
+      include: LEAD_INCLUDE,
+    });
+
+    if (idsAdicionados.length && userName) {
+      const novas = await this.prisma.etiqueta.findMany({ where: { id: { in: idsAdicionados } } });
+      await this.prisma.leadActivity.createMany({
+        data: novas.map((et) => ({
+          tenant_id: tenantId,
+          lead_id: leadId,
+          texto: `${userName} adicionou a etiqueta "${et.nome}"`,
+        })),
+      });
+    }
+
+    return updated;
+  }
+
+  async assignToSelf(tenantId: string, leadId: number, userId: string, userName: string, userRole?: string) {
+    const where: any = { id_number: leadId, tenant_id: tenantId };
+    if (userRole === 'atendente') where.OR = [{ vendedor_id: userId }, { vendedor_id: null }];
 
     const lead = await this.prisma.lead.findFirst({ where });
     if (!lead) throw new NotFoundException('Lead não encontrado.');
 
-    return this.prisma.lead.update({
-      where: { id_number: leadId },
-      data: { etiqueta_id: dto.etiqueta_id },
-      include: LEAD_INCLUDE,
-    });
+    const [updated] = await this.prisma.$transaction([
+      this.prisma.lead.update({ where: { id_number: leadId }, data: { vendedor_id: userId }, include: LEAD_INCLUDE }),
+      this.prisma.leadActivity.create({
+        data: { tenant_id: tenantId, lead_id: leadId, texto: `${userName} atribuiu a si mesmo essa conversa` },
+      }),
+    ]);
+    return updated;
   }
 
-  async assignVendedor(tenantId: string, leadId: number, dto: AssignVendedorDto) {
-    const lead = await this.prisma.lead.findFirst({ where: { id_number: leadId, tenant_id: tenantId } });
+  async assignVendedor(tenantId: string, leadId: number, dto: AssignVendedorDto, adminName?: string) {
+    const lead = await this.prisma.lead.findFirst({
+      where: { id_number: leadId, tenant_id: tenantId },
+      include: { vendedor: { select: { nome: true } } },
+    });
     if (!lead) throw new NotFoundException('Lead não encontrado.');
-    return this.prisma.lead.update({
-      where: { id_number: leadId },
-      data: { vendedor_id: dto.vendedor_id },
-      include: LEAD_INCLUDE,
+
+    const houveMudanca = dto.vendedor_id !== lead.vendedor_id;
+    const novoVendedor = houveMudanca && dto.vendedor_id
+      ? await this.prisma.user.findUnique({ where: { id: dto.vendedor_id }, select: { nome: true } })
+      : null;
+
+    let texto: string | null = null;
+    if (houveMudanca && adminName) {
+      if (!lead.vendedor_id) texto = `${adminName} atribuiu esta conversa a ${novoVendedor?.nome ?? 'um atendente'}`;
+      else if (!dto.vendedor_id) texto = `${adminName} removeu ${lead.vendedor?.nome ?? 'o atendente'} desta conversa`;
+      else texto = `${adminName} transferiu o atendimento de ${lead.vendedor?.nome ?? 'atendente anterior'} para ${novoVendedor?.nome ?? 'novo atendente'}`;
+    }
+
+    const [updated] = await this.prisma.$transaction([
+      this.prisma.lead.update({ where: { id_number: leadId }, data: { vendedor_id: dto.vendedor_id }, include: LEAD_INCLUDE }),
+      ...(texto ? [this.prisma.leadActivity.create({ data: { tenant_id: tenantId, lead_id: leadId, texto } })] : []),
+    ]);
+    return updated;
+  }
+
+  async getActivities(tenantId: string, leadId: number) {
+    return this.prisma.leadActivity.findMany({
+      where: { tenant_id: tenantId, lead_id: leadId },
+      orderBy: { criado_em: 'asc' },
     });
   }
 
@@ -201,7 +258,7 @@ export class LeadsService {
 
   async listVendedores(tenantId: string) {
     return this.prisma.user.findMany({
-      where: { tenant_id: tenantId, ativo: true, role: 'atendente' },
+      where: { tenant_id: tenantId, ativo: true },
       select: { id: true, nome: true, email: true },
       orderBy: { nome: 'asc' },
     });
@@ -222,7 +279,7 @@ export class LeadsService {
             nome: lead.nome,
             telefone: this.normalizeTelefone(lead.telefone),
             cpf: lead.cpf || null,
-            etiqueta_id: etiquetaPadrao?.id || null,
+            etiquetas: etiquetaPadrao ? { connect: [{ id: etiquetaPadrao.id }] } : undefined,
           },
         });
         inserted++;
@@ -257,7 +314,7 @@ export class LeadsService {
           nome: dto.nome,
           telefone,
           cpf: dto.cpf || null,
-          etiqueta_id: etiquetaPadrao?.id || null,
+          etiquetas: etiquetaPadrao ? { connect: [{ id: etiquetaPadrao.id }] } : undefined,
         },
       });
     }

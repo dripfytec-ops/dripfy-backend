@@ -1,9 +1,10 @@
 import { IsString, IsOptional, IsArray, IsNotEmpty } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
-export class UpdateLeadEtiquetaDto {
-  @IsString()
-  etiqueta_id: string;
+export class SetEtiquetasDto {
+  @IsArray()
+  @IsString({ each: true })
+  etiqueta_ids: string[];
 }
 
 export class AssignVendedorDto {

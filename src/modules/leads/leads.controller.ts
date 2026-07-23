@@ -1,11 +1,11 @@
 import {
-  Controller, Get, Post, Patch, Param, Body, Query,
+  Controller, Get, Post, Patch, Put, Param, Body, Query,
   UseGuards, UseInterceptors, UploadedFile, ParseIntPipe, BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import { LeadsService } from './leads.service';
-import { UpdateLeadEtiquetaDto, AssignVendedorDto, UpdateLeadDto, FilterLeadsDto, StartConversationDto } from './dto/leads.dto';
+import { SetEtiquetasDto, AssignVendedorDto, UpdateLeadDto, FilterLeadsDto, StartConversationDto } from './dto/leads.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -90,27 +90,50 @@ export class LeadsController {
     return this.leadsService.update(tenantId, id, dto);
   }
 
-  @Patch(':id/etiqueta')
-  @ApiOperation({ summary: 'Atualiza etiqueta do lead (drag-and-drop / dropdown)' })
-  updateEtiqueta(
+  @Put(':id/etiquetas')
+  @ApiOperation({ summary: 'Define o conjunto de etiquetas do lead (suporta múltiplas)' })
+  setEtiquetas(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser('tenant_id') tenantId: string,
     @CurrentUser('id') userId: string,
     @CurrentUser('role') role: string,
-    @Body() dto: UpdateLeadEtiquetaDto,
+    @CurrentUser('nome') userName: string,
+    @Body() dto: SetEtiquetasDto,
   ) {
-    return this.leadsService.updateEtiqueta(tenantId, id, dto, userId, role);
+    return this.leadsService.setEtiquetas(tenantId, id, dto, userId, role, userName);
   }
 
   @Patch(':id/vendedor')
   @Roles(UserRole.admin_master, UserRole.lojista_admin)
-  @ApiOperation({ summary: 'Atribui vendedor ao lead' })
+  @ApiOperation({ summary: 'Atribui/transfere vendedor do lead' })
   assignVendedor(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser('tenant_id') tenantId: string,
+    @CurrentUser('nome') adminName: string,
     @Body() dto: AssignVendedorDto,
   ) {
-    return this.leadsService.assignVendedor(tenantId, id, dto);
+    return this.leadsService.assignVendedor(tenantId, id, dto, adminName);
+  }
+
+  @Patch(':id/assign-me')
+  @ApiOperation({ summary: 'Ação rápida: atribui a conversa ao usuário logado' })
+  assignToSelf(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser('tenant_id') tenantId: string,
+    @CurrentUser('id') userId: string,
+    @CurrentUser('nome') userName: string,
+    @CurrentUser('role') role: string,
+  ) {
+    return this.leadsService.assignToSelf(tenantId, id, userId, userName, role);
+  }
+
+  @Get(':id/activities')
+  @ApiOperation({ summary: 'Histórico de atividades (atribuição, etiquetas, transferência) do lead' })
+  getActivities(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser('tenant_id') tenantId: string,
+  ) {
+    return this.leadsService.getActivities(tenantId, id);
   }
 
   @Patch(':id/read')

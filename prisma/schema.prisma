@@ -73,6 +73,7 @@ model Tenant {
   dm_campanhas        DmCampanha[]
   bm_tokens           BmToken[]
   quick_replies       QuickReply[]
+  lead_activities     LeadActivity[]
 
   @@map("tenants")
 }
@@ -119,8 +120,9 @@ model Etiqueta {
   criado_em       DateTime @default(now())
   atualizado_em   DateTime @updatedAt
 
-  tenant  Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
-  leads   Lead[]
+  tenant       Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  leads        Lead[] @relation("LeadEtiquetaLegacy")
+  leads_multi  Lead[] @relation("LeadEtiquetas")
 
   @@unique([tenant_id, slug])
   @@index([tenant_id, ordem])
@@ -176,10 +178,12 @@ model Lead {
   atualizado_em DateTime   @updatedAt
 
   tenant        Tenant        @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
-  etiqueta      Etiqueta?     @relation(fields: [etiqueta_id], references: [id], onDelete: SetNull)
+  etiqueta      Etiqueta?     @relation("LeadEtiquetaLegacy", fields: [etiqueta_id], references: [id], onDelete: SetNull)
+  etiquetas     Etiqueta[]    @relation("LeadEtiquetas")
   vendedor      User?         @relation("LeadVendedor", fields: [vendedor_id], references: [id], onDelete: SetNull)
   origem_campanha DmCampanha? @relation(fields: [origem_campanha_id], references: [id], onDelete: SetNull)
   messages      Message[]
+  activities    LeadActivity[]
 
   @@unique([tenant_id, cpf])
   @@index([tenant_id, status_atual])
@@ -212,6 +216,20 @@ model Message {
   @@index([tenant_id])
   @@index([wamid])
   @@map("messages")
+}
+
+model LeadActivity {
+  id        String   @id @default(uuid())
+  tenant_id String
+  lead_id   Int
+  texto     String
+  criado_em DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  lead   Lead   @relation(fields: [lead_id], references: [id_number], onDelete: Cascade)
+
+  @@index([lead_id])
+  @@map("lead_activities")
 }
 
 // ─── Disparo em Massa (canais oficiais Meta + campanhas em lote) ───────────
