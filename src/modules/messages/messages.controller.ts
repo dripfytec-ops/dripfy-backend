@@ -36,6 +36,15 @@ export class MessagesController {
     return this.messagesService.deleteByLead(tenantId, leadId);
   }
 
+  @Delete(':id')
+  @ApiOperation({ summary: 'Apagar uma mensagem específica' })
+  deleteOne(
+    @CurrentUser('tenant_id') tenantId: string,
+    @Param('id') id: string,
+  ) {
+    return this.messagesService.deleteOne(tenantId, id);
+  }
+
   @Post('reply/:leadId')
   @ApiOperation({ summary: 'Responder lead via WhatsApp (janela 24h)' })
   reply(

@@ -114,11 +114,12 @@ export class LeadsController {
   }
 
   @Patch(':id/read')
-  @ApiOperation({ summary: 'Marca a conversa do lead como lida (zera unread_count)' })
+  @ApiOperation({ summary: 'Marca a conversa do lead como lida ou não lida' })
   markRead(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser('tenant_id') tenantId: string,
+    @Body('lida') lida?: boolean,
   ) {
-    return this.leadsService.markRead(tenantId, id);
+    return this.leadsService.markRead(tenantId, id, lida ?? true);
   }
 }

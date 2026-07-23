@@ -57,6 +57,13 @@ export class MessagesService {
     return { deleted: count };
   }
 
+  async deleteOne(tenantId: string, messageId: string) {
+    const message = await this.prisma.message.findFirst({ where: { id: messageId, tenant_id: tenantId } });
+    if (!message) throw new NotFoundException('Mensagem não encontrada.');
+    await this.prisma.message.delete({ where: { id: messageId } });
+    return { deleted: true };
+  }
+
   async reply(tenantId: string, leadId: number, texto: string) {
     const { lead, canal } = await this.findLeadECanal(tenantId, leadId);
 

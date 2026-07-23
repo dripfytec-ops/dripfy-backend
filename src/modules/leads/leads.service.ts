@@ -128,12 +128,12 @@ export class LeadsService {
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
-  async markRead(tenantId: string, leadId: number) {
+  async markRead(tenantId: string, leadId: number, lida = true) {
     const lead = await this.prisma.lead.findFirst({ where: { id_number: leadId, tenant_id: tenantId } });
     if (!lead) throw new NotFoundException('Lead não encontrado.');
     return this.prisma.lead.update({
       where: { id_number: leadId },
-      data: { unread_count: 0 },
+      data: { unread_count: lida ? 0 : 1 },
       include: LEAD_INCLUDE,
     });
   }
