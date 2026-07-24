@@ -1,7 +1,7 @@
 import { Injectable, Logger, NotFoundException, BadRequestException, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MetaService } from './meta.service';
-import { CreateDmCampanhaDto, PatchDmCampanhaDto } from './dto/dm-campanha.dto';
+import { CreateDmCampanhaDto, PatchDmCampanhaDto, CreateDripifyCampanhaDto } from './dto/dm-campanha.dto';
 import { telefoneVariantes } from '../../common/utils/telefone.util';
 import { DmContato, DmCanal, MessageDirection, MessageStatus } from '@prisma/client';
 
@@ -22,11 +22,21 @@ export class DmCampanhasService implements OnModuleInit {
     }, 60_000);
   }
 
+  // Só campanhas de Disparo Próprio — as de Disparo Dripfy (tipo='dripfy')
+  // vivem só no painel do Master (/admin/demandas-dripfy), não nesta lista.
   async findAll(tenantId: string) {
     return this.prisma.dmCampanha.findMany({
-      where: { tenant_id: tenantId },
+      where: { tenant_id: tenantId, tipo: 'proprio' },
       orderBy: { criado_em: 'desc' },
       include: { canal: { select: { id: true, nome: true } }, vendedor: { select: { id: true, nome: true } } },
+    });
+  }
+
+  async findAllDripify(tenantId: string) {
+    return this.prisma.dmCampanha.findMany({
+      where: { tenant_id: tenantId, tipo: 'dripfy' },
+      orderBy: { criado_em: 'desc' },
+      include: { canal: { select: { id: true, nome: true } } },
     });
   }
 
@@ -79,26 +89,102 @@ export class DmCampanhasService implements OnModuleInit {
       // Persiste o Lead (nome + CPF) já na importação, não só quando a mensagem
       // é efetivamente enviada — assim o Chat já reconhece o contato (nome/CPF
       // preenchidos) mesmo antes do disparo rodar (ex: campanha agendada, ou
-      // parada aguardando recarga de créditos). Em lotes concorrentes pra não
-      // travar a resposta em campanhas com milhares de contatos.
-      const contatosNormalizados = dto.contatos.map((c) => ({
-        nome: c.nome || null,
-        cpf: c.cpf ? c.cpf.replace(/\D/g, '') || null : null,
-        telefone: this.normalizeTelefone(c.telefone),
-      }));
-      const LOTE_UPSERT = 20;
-      for (let i = 0; i < contatosNormalizados.length; i += LOTE_UPSERT) {
-        const lote = contatosNormalizados.slice(i, i + LOTE_UPSERT);
-        await Promise.allSettled(
-          lote.map((c) =>
-            this.garantirLead(tenantId, c, { id: campanha.id, nome: campanha.nome, vendedor_id: campanha.vendedor_id })
-              .catch((e) => this.logger.error(`Falha ao persistir lead do contato ${c.telefone}: ${e.message}`)),
-          ),
-        );
-      }
+      // parada aguardando recarga de créditos).
+      await this.persistirLeadsEmLote(tenantId, dto.contatos, campanha);
     }
 
     return campanha;
+  }
+
+  // Cria uma "demanda" de Disparo Dripfy: não passa pelo loop de envio da
+  // Meta (execução é manual pela equipe Dripfy, depois que o Master libera no
+  // painel /admin/demandas-dripfy) — mas os Leads já ficam prontos no Chat
+  // desde já, igual ao Disparo Próprio.
+  async createDripify(tenantId: string, dto: CreateDripifyCampanhaDto) {
+    const tenant = await this.prisma.tenant.findUniqueOrThrow({ where: { id: tenantId } });
+    const totalContatos = dto.contatos.length;
+    // Assume 1 crédito = 1 contato/mensagem — não existe hoje uma taxa de
+    // conversão diferente definida em nenhum outro lugar do sistema.
+    const saldoSuficiente = tenant.creditos_saldo >= totalContatos;
+
+    if (dto.canal_id) {
+      const canal = await this.prisma.dmCanal.findFirst({ where: { id: dto.canal_id, tenant_id: tenantId } });
+      if (!canal) throw new BadRequestException('Canal não encontrado.');
+    }
+
+    const campanha = await this.prisma.$transaction(async (tx) => {
+      const nova = await tx.dmCampanha.create({
+        data: {
+          tenant_id: tenantId,
+          canal_id: dto.canal_id || null,
+          nome: dto.nome,
+          tipo: 'dripfy',
+          prioridade: dto.prioridade || 'media',
+          mensagem_texto: dto.mensagem_texto,
+          link_botao: dto.link_botao || null,
+          foto_perfil_url: dto.foto_perfil_url || null,
+          midia_tipo: dto.midia_tipo || 'nenhuma',
+          midia_url: dto.midia_url || null,
+          agendado_para: dto.agendado_para ? new Date(dto.agendado_para) : null,
+          total_contatos: totalContatos,
+          status: saldoSuficiente ? 'agendada' : 'aguardando_pagamento',
+          financeiro_status: saldoSuficiente ? 'pago' : 'pendente',
+        },
+      });
+
+      if (saldoSuficiente) {
+        await tx.tenant.update({ where: { id: tenantId }, data: { creditos_saldo: { decrement: totalContatos } } });
+      }
+
+      if (dto.salvar_como_modelo && dto.nome_modelo) {
+        await tx.dmModeloMensagem.create({
+          data: { tenant_id: tenantId, nome: dto.nome_modelo, texto: dto.mensagem_texto, link_botao: dto.link_botao || null },
+        });
+      }
+
+      return nova;
+    });
+
+    await this.prisma.dmContato.createMany({
+      data: dto.contatos.map((c) => ({
+        campanha_id: campanha.id,
+        nome: c.nome || null,
+        cpf: c.cpf ? c.cpf.replace(/\D/g, '') || null : null,
+        telefone: this.normalizeTelefone(c.telefone),
+      })),
+    });
+
+    await this.persistirLeadsEmLote(tenantId, dto.contatos, campanha);
+
+    return campanha;
+  }
+
+  async listModelos(tenantId: string) {
+    return this.prisma.dmModeloMensagem.findMany({ where: { tenant_id: tenantId }, orderBy: { criado_em: 'desc' } });
+  }
+
+  // Upsert em lote dos Leads a partir de uma lista de contatos crus (CSV),
+  // com concorrência limitada pra não travar a resposta em listas grandes.
+  private async persistirLeadsEmLote(
+    tenantId: string,
+    contatosCsv: { nome?: string; cpf?: string; telefone: string }[],
+    campanha: { id: string; nome: string; vendedor_id?: string | null },
+  ) {
+    const contatosNormalizados = contatosCsv.map((c) => ({
+      nome: c.nome || null,
+      cpf: c.cpf ? c.cpf.replace(/\D/g, '') || null : null,
+      telefone: this.normalizeTelefone(c.telefone),
+    }));
+    const LOTE_UPSERT = 20;
+    for (let i = 0; i < contatosNormalizados.length; i += LOTE_UPSERT) {
+      const lote = contatosNormalizados.slice(i, i + LOTE_UPSERT);
+      await Promise.allSettled(
+        lote.map((c) =>
+          this.garantirLead(tenantId, c, { id: campanha.id, nome: campanha.nome, vendedor_id: campanha.vendedor_id ?? null })
+            .catch((e) => this.logger.error(`Falha ao persistir lead do contato ${c.telefone}: ${e.message}`)),
+        ),
+      );
+    }
   }
 
   // Garante que existe um Lead pro contato (nome + CPF + origem da campanha),
@@ -168,6 +254,9 @@ export class DmCampanhasService implements OnModuleInit {
   async iniciarDisparo(tenantId: string, campanhaId: string) {
     const campanha = await this.prisma.dmCampanha.findFirst({ where: { id: campanhaId, tenant_id: tenantId } });
     if (!campanha) throw new NotFoundException('Campanha não encontrada.');
+    if (campanha.tipo === 'dripfy') {
+      throw new BadRequestException('Demandas de Disparo Dripfy são executadas manualmente pela equipe Dripfy, não pelo disparo automático.');
+    }
     if (this.loopsAtivos.has(campanhaId)) return { started: false };
     if (!campanha.canal_id) throw new BadRequestException('Campanha sem canal definido.');
     const canal = await this.prisma.dmCanal.findUnique({ where: { id: campanha.canal_id } });

@@ -13,6 +13,7 @@ import { EtiquetasModule } from './modules/etiquetas/etiquetas.module';
 import { BmTokensModule } from './modules/bm-tokens/bm-tokens.module';
 import { QuickRepliesModule } from './modules/quick-replies/quick-replies.module';
 import { FinanceiroModule } from './modules/financeiro/financeiro.module';
+import { AdminCampanhasJmdModule } from './modules/admin-campanhas-jmd/admin-campanhas-jmd.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { FinanceiroModule } from './modules/financeiro/financeiro.module';
     BmTokensModule,
     QuickRepliesModule,
     FinanceiroModule,
+    AdminCampanhasJmdModule,
   ],
 })
 export class AppModule {}

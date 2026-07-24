@@ -1,13 +1,15 @@
 import {
-  Controller, Get, Post, Patch, Param, Body, Query, UseGuards, BadRequestException,
+  Controller, Get, Post, Patch, Param, Body, Query, UseGuards, UseInterceptors, UploadedFile, BadRequestException,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import { DmCanaisService } from './dm-canais.service';
 import { DmCampanhasService } from './dm-campanhas.service';
 import { CreateDmCanalDto, UpdateDmCanalDto } from './dto/dm-canal.dto';
-import { CreateDmCampanhaDto, PatchDmCampanhaDto } from './dto/dm-campanha.dto';
+import { CreateDmCampanhaDto, PatchDmCampanhaDto, CreateDripifyCampanhaDto } from './dto/dm-campanha.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { MediaService } from '../../common/media/media.service';
 
 @ApiTags('disparo-massa')
 @ApiBearerAuth()
@@ -17,6 +19,7 @@ export class DisparoMassaController {
   constructor(
     private readonly canaisService: DmCanaisService,
     private readonly campanhasService: DmCampanhasService,
+    private readonly mediaService: MediaService,
   ) {}
 
   // ─── Canais ───────────────────────────────────────────────────────────
@@ -81,5 +84,34 @@ export class DisparoMassaController {
   processar(@CurrentUser('tenant_id') tenantId: string, @Body('campanha_id') campanhaId: string) {
     if (!campanhaId) throw new BadRequestException('campanha_id é obrigatório');
     return this.campanhasService.iniciarDisparo(tenantId, campanhaId);
+  }
+
+  // ─── Disparo Dripfy (demanda manual, executada pela equipe Dripfy) ──────
+  @Get('dripify')
+  @ApiOperation({ summary: 'Lista as demandas de Disparo Dripfy do tenant' })
+  listDripify(@CurrentUser('tenant_id') tenantId: string) {
+    return this.campanhasService.findAllDripify(tenantId);
+  }
+
+  @Post('dripify')
+  @ApiOperation({ summary: 'Cria uma demanda de Disparo Dripfy (execução manual pela equipe Dripfy)' })
+  createDripify(@CurrentUser('tenant_id') tenantId: string, @Body() dto: CreateDripifyCampanhaDto) {
+    return this.campanhasService.createDripify(tenantId, dto);
+  }
+
+  @Get('modelos')
+  @ApiOperation({ summary: 'Lista os modelos de mensagem salvos do tenant (usados no wizard Dripfy)' })
+  listModelos(@CurrentUser('tenant_id') tenantId: string) {
+    return this.campanhasService.listModelos(tenantId);
+  }
+
+  @Post('upload-midia')
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Upload de imagem/vídeo/foto de perfil pro wizard de Disparo Dripfy' })
+  uploadMidia(@UploadedFile() file: Express.Multer.File) {
+    if (!file) throw new BadRequestException('Nenhum arquivo enviado.');
+    const relativeUrl = this.mediaService.saveBuffer(file.buffer, file.mimetype);
+    return { url: this.mediaService.publicUrl(relativeUrl) };
   }
 }

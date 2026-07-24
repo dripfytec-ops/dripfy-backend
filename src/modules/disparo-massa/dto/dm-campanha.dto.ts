@@ -1,9 +1,9 @@
 import { Type } from 'class-transformer';
 import {
-  IsString, IsOptional, IsArray, IsDateString, ValidateNested, IsEnum, ArrayMinSize,
+  IsString, IsOptional, IsArray, IsDateString, ValidateNested, IsEnum, ArrayMinSize, IsBoolean,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { DmCampanhaStatus } from '@prisma/client';
+import { DmCampanhaStatus, DmCampanhaPrioridade, DmMidiaTipo } from '@prisma/client';
 
 export class ContatoCsvDto {
   @ApiPropertyOptional() @IsOptional() @IsString() nome?: string;
@@ -30,4 +30,29 @@ export class CreateDmCampanhaDto {
 
 export class PatchDmCampanhaDto {
   @ApiPropertyOptional({ enum: DmCampanhaStatus }) @IsOptional() @IsEnum(DmCampanhaStatus) status?: DmCampanhaStatus;
+}
+
+export class CreateDripifyCampanhaDto {
+  @ApiProperty() @IsString() nome: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() canal_id?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() foto_perfil_url?: string;
+
+  @ApiProperty() @IsString() mensagem_texto: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() link_botao?: string;
+
+  @ApiPropertyOptional({ enum: DmMidiaTipo }) @IsOptional() @IsEnum(DmMidiaTipo) midia_tipo?: DmMidiaTipo;
+  @ApiPropertyOptional() @IsOptional() @IsString() midia_url?: string;
+
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() salvar_como_modelo?: boolean;
+  @ApiPropertyOptional() @IsOptional() @IsString() nome_modelo?: string;
+
+  @ApiPropertyOptional() @IsOptional() @IsDateString() agendado_para?: string;
+  @ApiPropertyOptional({ enum: DmCampanhaPrioridade }) @IsOptional() @IsEnum(DmCampanhaPrioridade) prioridade?: DmCampanhaPrioridade;
+
+  @ApiProperty({ type: [ContatoCsvDto] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => ContatoCsvDto)
+  contatos: ContatoCsvDto[];
 }

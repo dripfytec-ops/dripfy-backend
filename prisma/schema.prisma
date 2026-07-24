@@ -46,6 +46,7 @@ enum DmCampanhaStatus {
   concluida
   pausada
   aguardando_recarga
+  aguardando_pagamento
 }
 
 enum InvoiceStatus {
@@ -53,6 +54,28 @@ enum InvoiceStatus {
   pago
   expirado
   cancelado
+}
+
+enum DmCampanhaTipo {
+  proprio
+  dripfy
+}
+
+enum DmCampanhaPrioridade {
+  baixa
+  media
+  alta
+}
+
+enum DmFinanceiroStatus {
+  pendente
+  pago
+}
+
+enum DmMidiaTipo {
+  nenhuma
+  imagem
+  video
 }
 
 enum DmContatoStatus {
@@ -84,6 +107,7 @@ model Tenant {
   quick_replies       QuickReply[]
   lead_activities     LeadActivity[]
   invoices            Invoice[]
+  dm_modelos_mensagem DmModeloMensagem[]
 
   @@map("tenants")
 }
@@ -293,7 +317,7 @@ model DmCampanha {
   canal_id          String?
   vendedor_id       String?
   nome              String
-  template_name     String
+  template_name     String?
   template_params   Json?             @default("[]")
   header_image_url  String?
   status            DmCampanhaStatus  @default(rascunho)
@@ -305,6 +329,18 @@ model DmCampanha {
   criado_em         DateTime          @default(now())
   iniciado_em       DateTime?
 
+  // ─── Disparo Dripfy (demanda manual, executada via JMD) ─────────────────
+  tipo              DmCampanhaTipo       @default(proprio)
+  prioridade        DmCampanhaPrioridade @default(media)
+  financeiro_status DmFinanceiroStatus?
+  mensagem_texto    String?
+  link_botao        String?
+  foto_perfil_url   String?
+  midia_tipo        DmMidiaTipo?
+  midia_url         String?
+  aprovado_em       DateTime?
+  aprovado_por      String?
+
   tenant    Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   canal     DmCanal?     @relation(fields: [canal_id], references: [id], onDelete: SetNull)
   vendedor  User?        @relation("DmCampanhaVendedor", fields: [vendedor_id], references: [id], onDelete: SetNull)
@@ -312,7 +348,22 @@ model DmCampanha {
   leads_origem Lead[]
 
   @@index([tenant_id, status])
+  @@index([tipo, financeiro_status])
   @@map("dm_campanhas")
+}
+
+model DmModeloMensagem {
+  id         String   @id @default(uuid())
+  tenant_id  String
+  nome       String
+  texto      String
+  link_botao String?
+  criado_em  DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id])
+  @@map("dm_modelos_mensagem")
 }
 
 model DmContato {
