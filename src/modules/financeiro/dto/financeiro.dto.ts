@@ -1,5 +1,5 @@
-import { IsNumber, Min } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { IsNumber, IsOptional, Min } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class ComprarCreditosDto {
   @ApiProperty()
@@ -7,8 +7,10 @@ export class ComprarCreditosDto {
   @Min(1)
   quantidade_creditos: number;
 
-  @ApiProperty()
+  // Ignorado pelo backend (o preço real é sempre recalculado no servidor) —
+  // mantido opcional só por compatibilidade com clientes antigos.
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsNumber()
-  @Min(0.01)
-  valor_total: number;
+  valor_total?: number;
 }

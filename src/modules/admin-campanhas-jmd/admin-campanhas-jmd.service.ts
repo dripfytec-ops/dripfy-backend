@@ -1,9 +1,10 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { FinanceiroService } from '../financeiro/financeiro.service';
 
 @Injectable()
 export class AdminCampanhasJmdService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private financeiro: FinanceiroService) {}
 
   async findAll() {
     return this.prisma.dmCampanha.findMany({
@@ -22,8 +23,8 @@ export class AdminCampanhasJmdService {
     if (campanha.tipo !== 'dripfy') throw new BadRequestException('Essa campanha não é uma demanda Dripfy.');
     if (campanha.financeiro_status === 'pago') return campanha;
 
-    const [atualizada] = await this.prisma.$transaction([
-      this.prisma.dmCampanha.update({
+    return this.prisma.$transaction(async (tx) => {
+      const atualizada = await tx.dmCampanha.update({
         where: { id },
         data: {
           financeiro_status: 'pago',
@@ -31,10 +32,32 @@ export class AdminCampanhasJmdService {
           aprovado_em: new Date(),
           aprovado_por: aprovadoPor,
         },
-      }),
-    ]);
+      });
 
-    return atualizada;
+      // Pagamento manual (PIX estático + comprovante) cobre exatamente os
+      // créditos desta demanda — registra a entrada e a saída no extrato pra
+      // ficar transparente pro parceiro, mesmo sem mexer no saldo líquido.
+      const totalContatos = campanha.total_contatos;
+      const saldoAtual = campanha.tenant.creditos_saldo;
+      await this.financeiro.registrarTransacao(tx, {
+        tenantId: campanha.tenant_id,
+        tipo: 'compra',
+        quantidade: totalContatos,
+        saldoApos: saldoAtual + totalContatos,
+        descricao: `Pagamento confirmado (PIX manual) — demanda "${campanha.nome}"`,
+        campanhaId: campanha.id,
+      });
+      await this.financeiro.registrarTransacao(tx, {
+        tenantId: campanha.tenant_id,
+        tipo: 'consumo',
+        quantidade: -totalContatos,
+        saldoApos: saldoAtual,
+        descricao: `Consumo — demanda "${campanha.nome}" (${totalContatos} contatos)`,
+        campanhaId: campanha.id,
+      });
+
+      return atualizada;
+    });
   }
 
   async exportarContatosCsv(id: string) {

@@ -11,6 +11,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { UserRole } from '@prisma/client';
 import { AuthService } from '../auth/auth.service';
+import { FinanceiroService } from '../financeiro/financeiro.service';
 
 @ApiTags('tenants')
 @ApiBearerAuth()
@@ -21,6 +22,7 @@ export class TenantsController {
   constructor(
     private readonly tenantsService: TenantsService,
     private readonly authService: AuthService,
+    private readonly financeiroService: FinanceiroService,
   ) {}
 
   @Post()
@@ -52,5 +54,11 @@ export class TenantsController {
   @ApiOperation({ summary: '[Master] Entra no Dashboard de um Tenant com visão unificada de lojista_admin' })
   impersonate(@Param('id') id: string, @CurrentUser('id') masterUserId: string) {
     return this.authService.impersonateTenant(masterUserId, id);
+  }
+
+  @Get(':id/extrato')
+  @ApiOperation({ summary: '[Master] Extrato (conta corrente) de créditos de um Tenant específico' })
+  getExtrato(@Param('id') id: string) {
+    return this.financeiroService.getExtrato(id);
   }
 }

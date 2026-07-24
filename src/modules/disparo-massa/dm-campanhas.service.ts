@@ -1,6 +1,7 @@
 import { Injectable, Logger, NotFoundException, BadRequestException, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MetaService } from './meta.service';
+import { FinanceiroService } from '../financeiro/financeiro.service';
 import { CreateDmCampanhaDto, PatchDmCampanhaDto, CreateDripifyCampanhaDto } from './dto/dm-campanha.dto';
 import { telefoneVariantes } from '../../common/utils/telefone.util';
 import { DmContato, DmCanal, MessageDirection, MessageStatus } from '@prisma/client';
@@ -13,7 +14,7 @@ export class DmCampanhasService implements OnModuleInit {
   private readonly logger = new Logger(DmCampanhasService.name);
   private loopsAtivos = new Set<string>();
 
-  constructor(private prisma: PrismaService, private meta: MetaService) {}
+  constructor(private prisma: PrismaService, private meta: MetaService, private financeiro: FinanceiroService) {}
 
   async onModuleInit() {
     this.resumirCampanhasAtivas().catch((e) => this.logger.error(`resumirCampanhasAtivas: ${e.message}`));
@@ -133,7 +134,15 @@ export class DmCampanhasService implements OnModuleInit {
       });
 
       if (saldoSuficiente) {
-        await tx.tenant.update({ where: { id: tenantId }, data: { creditos_saldo: { decrement: totalContatos } } });
+        const tenantAtualizado = await tx.tenant.update({ where: { id: tenantId }, data: { creditos_saldo: { decrement: totalContatos } } });
+        await this.financeiro.registrarTransacao(tx, {
+          tenantId,
+          tipo: 'consumo',
+          quantidade: -totalContatos,
+          saldoApos: tenantAtualizado.creditos_saldo,
+          descricao: `Consumo — demanda "${dto.nome}" (${totalContatos} contatos)`,
+          campanhaId: nova.id,
+        });
       }
 
       if (dto.salvar_como_modelo && dto.nome_modelo) {

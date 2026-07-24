@@ -1,4 +1,5 @@
 import { Injectable, Logger, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PixGatewayService } from './pix-gateway.service';
 import { ComprarCreditosDto } from './dto/financeiro.dto';
@@ -7,6 +8,12 @@ import { ComprarCreditosDto } from './dto/financeiro.dto';
 // gateway definitivo for outro (ex: Mercado Pago usa 'payment.updated' +
 // consulta de status, não um nome de evento fixo).
 const EVENTOS_PAGAMENTO_CONFIRMADO = ['PAYMENT_RECEIVED', 'PAYMENT_CONFIRMED'];
+
+// Preço praticado hoje: cobramos R$0,27 por crédito do parceiro; nosso custo
+// de execução via JMD é de R$0,18 — margem de R$0,09/crédito. O preço
+// nunca vem do cliente (evita fraude), sempre calculado aqui.
+export const PRECO_CREDITO = 0.27;
+export const CUSTO_CREDITO_JMD = 0.18;
 
 @Injectable()
 export class FinanceiroService {
@@ -17,11 +24,15 @@ export class FinanceiroService {
   async comprarCreditos(tenantId: string, dto: ComprarCreditosDto) {
     const tenant = await this.prisma.tenant.findUniqueOrThrow({ where: { id: tenantId } });
 
+    // valor_total nunca vem do cliente — sempre recalculado aqui pelo preço
+    // vigente, pra ninguém conseguir comprar créditos abaixo do preço real.
+    const valorTotal = Math.round(dto.quantidade_creditos * PRECO_CREDITO * 100) / 100;
+
     const invoice = await this.prisma.invoice.create({
       data: {
         tenant_id: tenantId,
         quantidade_creditos: dto.quantidade_creditos,
-        valor_total: dto.valor_total,
+        valor_total: valorTotal,
         status: 'pendente',
         gateway: 'asaas',
       },
@@ -29,7 +40,7 @@ export class FinanceiroService {
 
     try {
       const cobranca = await this.pixGateway.criarCobrancaPix({
-        valor: dto.valor_total,
+        valor: valorTotal,
         descricao: `Dripfy - ${dto.quantidade_creditos} créditos`,
         referenciaExterna: invoice.id,
         nomeCliente: tenant.nome_empresa,
@@ -65,6 +76,48 @@ export class FinanceiroService {
     return { creditos_saldo: tenant.creditos_saldo };
   }
 
+  // Extrato (conta corrente) do próprio tenant — usado pela tela do parceiro
+  // em Disparo Dripfy > Créditos.
+  async getExtrato(tenantId: string, limit = 100) {
+    const [saldo, transacoes] = await Promise.all([
+      this.getSaldo(tenantId),
+      this.prisma.creditoTransacao.findMany({
+        where: { tenant_id: tenantId },
+        orderBy: { criado_em: 'desc' },
+        take: limit,
+      }),
+    ]);
+    return { creditos_saldo: saldo.creditos_saldo, transacoes };
+  }
+
+  // Registra uma transação no ledger e retorna o registro criado. Não mexe
+  // no saldo em si — quem chama já deve ter feito o increment/decrement
+  // (evita incrementar duas vezes ou dessincronizar saldo_apos).
+  async registrarTransacao(
+    tx: Prisma.TransactionClient,
+    params: {
+      tenantId: string;
+      tipo: 'compra' | 'consumo' | 'ajuste';
+      quantidade: number;
+      saldoApos: number;
+      descricao: string;
+      campanhaId?: string;
+      invoiceId?: string;
+    },
+  ) {
+    return tx.creditoTransacao.create({
+      data: {
+        tenant_id: params.tenantId,
+        tipo: params.tipo,
+        quantidade: params.quantidade,
+        saldo_apos: params.saldoApos,
+        descricao: params.descricao,
+        campanha_id: params.campanhaId,
+        invoice_id: params.invoiceId,
+      },
+    });
+  }
+
   // Processa o webhook de confirmação de pagamento do gateway. `token` é o
   // segredo compartilhado configurado no painel do gateway (ex: header
   // "asaas-access-token" na Asaas) — sem ele, qualquer um que descobrisse a
@@ -88,13 +141,21 @@ export class FinanceiroService {
     }
     if (invoice.status === 'pago') return { status: 'already_processed' }; // idempotência: gateway pode reenviar o evento
 
-    await this.prisma.$transaction([
-      this.prisma.invoice.update({ where: { id: invoice.id }, data: { status: 'pago', pago_em: new Date() } }),
-      this.prisma.tenant.update({
+    await this.prisma.$transaction(async (tx) => {
+      await tx.invoice.update({ where: { id: invoice.id }, data: { status: 'pago', pago_em: new Date() } });
+      const tenantAtualizado = await tx.tenant.update({
         where: { id: invoice.tenant_id },
         data: { creditos_saldo: { increment: invoice.quantidade_creditos } },
-      }),
-    ]);
+      });
+      await this.registrarTransacao(tx, {
+        tenantId: invoice.tenant_id,
+        tipo: 'compra',
+        quantidade: invoice.quantidade_creditos,
+        saldoApos: tenantAtualizado.creditos_saldo,
+        descricao: `Compra de ${invoice.quantidade_creditos} créditos via PIX`,
+        invoiceId: invoice.id,
+      });
+    });
 
     await this.retomarCampanhasAguardandoRecarga(invoice.tenant_id);
 

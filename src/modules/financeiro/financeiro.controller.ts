@@ -29,4 +29,10 @@ export class FinanceiroController {
   getSaldo(@CurrentUser('tenant_id') tenantId: string) {
     return this.financeiroService.getSaldo(tenantId);
   }
+
+  @Get('extrato')
+  @ApiOperation({ summary: 'Extrato (conta corrente) de créditos do tenant' })
+  getExtrato(@CurrentUser('tenant_id') tenantId: string) {
+    return this.financeiroService.getExtrato(tenantId);
+  }
 }
