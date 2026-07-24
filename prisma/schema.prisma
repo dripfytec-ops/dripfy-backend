@@ -45,6 +45,14 @@ enum DmCampanhaStatus {
   em_andamento
   concluida
   pausada
+  aguardando_recarga
+}
+
+enum InvoiceStatus {
+  pendente
+  pago
+  expirado
+  cancelado
 }
 
 enum DmContatoStatus {
@@ -61,6 +69,7 @@ model Tenant {
   nome_empresa        String
   slug                String             @unique
   status_assinatura   SubscriptionStatus @default(trial)
+  creditos_saldo      Int                @default(0)
   criado_em           DateTime           @default(now())
   atualizado_em       DateTime           @updatedAt
 
@@ -74,8 +83,29 @@ model Tenant {
   bm_tokens           BmToken[]
   quick_replies       QuickReply[]
   lead_activities     LeadActivity[]
+  invoices            Invoice[]
 
   @@map("tenants")
+}
+
+model Invoice {
+  id                   String        @id @default(uuid())
+  tenant_id            String
+  quantidade_creditos  Int
+  valor_total          Decimal       @db.Decimal(10, 2)
+  status               InvoiceStatus @default(pendente)
+  gateway              String
+  gateway_payment_id   String?       @unique
+  pix_qrcode_base64    String?       @db.Text
+  pix_copia_cola       String?       @db.Text
+  criado_em            DateTime      @default(now())
+  pago_em              DateTime?
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id])
+  @@index([status])
+  @@map("invoices")
 }
 
 model User {

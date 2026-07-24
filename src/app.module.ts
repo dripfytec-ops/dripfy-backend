@@ -12,6 +12,7 @@ import { MessagesModule } from './modules/messages/messages.module';
 import { EtiquetasModule } from './modules/etiquetas/etiquetas.module';
 import { BmTokensModule } from './modules/bm-tokens/bm-tokens.module';
 import { QuickRepliesModule } from './modules/quick-replies/quick-replies.module';
+import { FinanceiroModule } from './modules/financeiro/financeiro.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { QuickRepliesModule } from './modules/quick-replies/quick-replies.module
     EtiquetasModule,
     BmTokensModule,
     QuickRepliesModule,
+    FinanceiroModule,
   ],
 })
 export class AppModule {}

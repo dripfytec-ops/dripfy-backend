@@ -4,9 +4,10 @@ import { WebhookService } from './webhook.service';
 import { ChatwootModule } from '../chatwoot/chatwoot.module';
 import { DisparoMassaModule } from '../disparo-massa/disparo-massa.module';
 import { MediaModule } from '../../common/media/media.module';
+import { FinanceiroModule } from '../financeiro/financeiro.module';
 
 @Module({
-  imports: [ChatwootModule, DisparoMassaModule, MediaModule],
+  imports: [ChatwootModule, DisparoMassaModule, MediaModule, FinanceiroModule],
   controllers: [WebhookController],
   providers: [WebhookService],
 })

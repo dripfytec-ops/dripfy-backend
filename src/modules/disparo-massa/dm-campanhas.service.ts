@@ -75,9 +75,88 @@ export class DmCampanhasService implements OnModuleInit {
           telefone: this.normalizeTelefone(c.telefone),
         })),
       });
+
+      // Persiste o Lead (nome + CPF) já na importação, não só quando a mensagem
+      // é efetivamente enviada — assim o Chat já reconhece o contato (nome/CPF
+      // preenchidos) mesmo antes do disparo rodar (ex: campanha agendada, ou
+      // parada aguardando recarga de créditos). Em lotes concorrentes pra não
+      // travar a resposta em campanhas com milhares de contatos.
+      const contatosNormalizados = dto.contatos.map((c) => ({
+        nome: c.nome || null,
+        cpf: c.cpf ? c.cpf.replace(/\D/g, '') || null : null,
+        telefone: this.normalizeTelefone(c.telefone),
+      }));
+      const LOTE_UPSERT = 20;
+      for (let i = 0; i < contatosNormalizados.length; i += LOTE_UPSERT) {
+        const lote = contatosNormalizados.slice(i, i + LOTE_UPSERT);
+        await Promise.allSettled(
+          lote.map((c) =>
+            this.garantirLead(tenantId, c, { id: campanha.id, nome: campanha.nome, vendedor_id: campanha.vendedor_id })
+              .catch((e) => this.logger.error(`Falha ao persistir lead do contato ${c.telefone}: ${e.message}`)),
+          ),
+        );
+      }
     }
 
     return campanha;
+  }
+
+  // Garante que existe um Lead pro contato (nome + CPF + origem da campanha),
+  // sem mexer em campos de envio (last_message_*, disparado) — isso fica a
+  // cargo de sincronizarLead, chamado só quando a mensagem é de fato enviada.
+  private async garantirLead(
+    tenantId: string,
+    contato: { nome: string | null; cpf: string | null; telefone: string },
+    campanha: { id: string; nome: string; vendedor_id: string | null },
+  ) {
+    const lead = await this.prisma.lead.findFirst({
+      where: { tenant_id: tenantId, telefone: { in: telefoneVariantes(contato.telefone) } },
+    });
+
+    if (!lead) {
+      await this.prisma.lead.create({
+        data: {
+          tenant_id: tenantId,
+          nome: contato.nome || `Contato ${contato.telefone}`,
+          telefone: contato.telefone,
+          cpf: contato.cpf || null,
+          origem_campanha_id: campanha.id,
+          origem_campanha_nome: campanha.nome,
+          vendedor_id: campanha.vendedor_id,
+        },
+      }).catch(async (e) => {
+        // Corrida/duplicidade: CPF já usado por outro lead do tenant. Segue
+        // sem CPF em vez de derrubar a importação do contato.
+        if (contato.cpf) {
+          return this.prisma.lead.create({
+            data: {
+              tenant_id: tenantId,
+              nome: contato.nome || `Contato ${contato.telefone}`,
+              telefone: contato.telefone,
+              origem_campanha_id: campanha.id,
+              origem_campanha_nome: campanha.nome,
+              vendedor_id: campanha.vendedor_id,
+            },
+          });
+        }
+        throw e;
+      });
+      return;
+    }
+
+    await this.prisma.lead.update({
+      where: { id_number: lead.id_number },
+      data: {
+        nome: contato.nome || lead.nome,
+        cpf: lead.cpf ?? contato.cpf ?? undefined,
+        // Carimbo de origem é fixo: só grava se o lead ainda não tinha uma
+        // campanha de origem (ex: foi criado antes por resposta espontânea).
+        ...(lead.origem_campanha_id ? {} : { origem_campanha_id: campanha.id, origem_campanha_nome: campanha.nome }),
+        // Só atribui o vendedor exclusivo da campanha se o lead ainda não
+        // tinha vendedor — não sobrescreve uma atribuição manual existente.
+        ...(lead.vendedor_id || !campanha.vendedor_id ? {} : { vendedor_id: campanha.vendedor_id }),
+      },
+    }).catch(() => {});
   }
 
   async patch(tenantId: string, id: string, dto: PatchDmCampanhaDto) {
@@ -209,11 +288,11 @@ export class DmCampanhasService implements OnModuleInit {
     });
   }
 
-  // Ponte entre o Disparo em Massa e o Chat: garante que, assim que uma
-  // mensagem de campanha é enviada com sucesso, exista um Lead com os dados
-  // completos (nome completo + CPF) e o histórico de mensagens já mostre o
-  // template enviado — sem isso, a conversa só apareceria no Chat quando (e
-  // se) o cliente respondesse.
+  // Ponte entre o Disparo em Massa e o Chat: quando uma mensagem de campanha
+  // é enviada com sucesso, marca o lead como disparado e registra a mensagem
+  // no histórico. O Lead em si (nome/CPF/origem) já foi garantido antes, na
+  // importação (ver garantirLead, chamado em create()) — aqui é só o
+  // carimbo de envio + o registro da mensagem enviada.
   private async sincronizarLead(
     tenantId: string,
     contato: DmContato,
@@ -221,62 +300,20 @@ export class DmCampanhasService implements OnModuleInit {
     wamid: string | null,
   ) {
     const preview = `Template: ${campanha.template_name}`;
-    let lead = await this.prisma.lead.findFirst({
+    await this.garantirLead(tenantId, { nome: contato.nome, cpf: contato.cpf, telefone: contato.telefone }, campanha);
+
+    const lead = await this.prisma.lead.findFirst({
       where: { tenant_id: tenantId, telefone: { in: telefoneVariantes(contato.telefone) } },
     });
-
     if (!lead) {
-      lead = await this.prisma.lead.create({
-        data: {
-          tenant_id: tenantId,
-          nome: contato.nome || `Contato ${contato.telefone}`,
-          telefone: contato.telefone,
-          cpf: contato.cpf || null,
-          disparado: true,
-          last_message_at: new Date(),
-          last_message_preview: preview,
-          origem_campanha_id: campanha.id,
-          origem_campanha_nome: campanha.nome,
-          vendedor_id: campanha.vendedor_id,
-        },
-      }).catch(async (e) => {
-        // Corrida rara: CPF já usado por outro lead do tenant. Segue sem CPF
-        // em vez de derrubar o disparo do contato.
-        if (contato.cpf) {
-          return this.prisma.lead.create({
-            data: {
-              tenant_id: tenantId,
-              nome: contato.nome || `Contato ${contato.telefone}`,
-              telefone: contato.telefone,
-              disparado: true,
-              last_message_at: new Date(),
-              last_message_preview: preview,
-              origem_campanha_id: campanha.id,
-              origem_campanha_nome: campanha.nome,
-              vendedor_id: campanha.vendedor_id,
-            },
-          });
-        }
-        throw e;
-      });
-    } else {
-      await this.prisma.lead.update({
-        where: { id_number: lead.id_number },
-        data: {
-          nome: contato.nome || lead.nome,
-          cpf: lead.cpf ?? contato.cpf ?? undefined,
-          disparado: true,
-          last_message_at: new Date(),
-          last_message_preview: preview,
-          // Carimbo de origem é fixo: só grava se o lead ainda não tinha uma
-          // campanha de origem (ex: foi criado antes por resposta espontânea).
-          ...(lead.origem_campanha_id ? {} : { origem_campanha_id: campanha.id, origem_campanha_nome: campanha.nome }),
-          // Só atribui o vendedor exclusivo da campanha se o lead ainda não
-          // tinha vendedor — não sobrescreve uma atribuição manual existente.
-          ...(lead.vendedor_id || !campanha.vendedor_id ? {} : { vendedor_id: campanha.vendedor_id }),
-        },
-      }).catch(() => {});
+      this.logger.error(`Lead não encontrado após garantirLead para o contato ${contato.telefone} — pulando registro da mensagem.`);
+      return;
     }
+
+    await this.prisma.lead.update({
+      where: { id_number: lead.id_number },
+      data: { disparado: true, last_message_at: new Date(), last_message_preview: preview },
+    }).catch(() => {});
 
     await this.prisma.message.create({
       data: {

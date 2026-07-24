@@ -8,7 +8,9 @@ import { CreateTenantDto, UpdateTenantStatusDto } from './dto/create-tenant.dto'
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { UserRole } from '@prisma/client';
+import { AuthService } from '../auth/auth.service';
 
 @ApiTags('tenants')
 @ApiBearerAuth()
@@ -16,7 +18,10 @@ import { UserRole } from '@prisma/client';
 @Roles(UserRole.admin_master)
 @Controller('tenants')
 export class TenantsController {
-  constructor(private readonly tenantsService: TenantsService) {}
+  constructor(
+    private readonly tenantsService: TenantsService,
+    private readonly authService: AuthService,
+  ) {}
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
@@ -41,5 +46,11 @@ export class TenantsController {
   @ApiOperation({ summary: '[Master] Altera status de assinatura do Tenant' })
   updateStatus(@Param('id') id: string, @Body() dto: UpdateTenantStatusDto) {
     return this.tenantsService.updateStatus(id, dto);
+  }
+
+  @Post(':id/impersonate')
+  @ApiOperation({ summary: '[Master] Entra no Dashboard de um Tenant com visão unificada de lojista_admin' })
+  impersonate(@Param('id') id: string, @CurrentUser('id') masterUserId: string) {
+    return this.authService.impersonateTenant(masterUserId, id);
   }
 }

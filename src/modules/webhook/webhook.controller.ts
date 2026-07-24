@@ -1,13 +1,30 @@
-import { Controller, Post, Get, Query, Body, Param, Logger, HttpCode } from '@nestjs/common';
+import { Controller, Post, Get, Query, Body, Param, Headers, Logger, HttpCode } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { WebhookService } from './webhook.service';
+import { FinanceiroService } from '../financeiro/financeiro.service';
 
 @ApiTags('webhook')
 @Controller('webhook')
 export class WebhookController {
   private readonly logger = new Logger(WebhookController.name);
 
-  constructor(private readonly webhookService: WebhookService) {}
+  constructor(
+    private readonly webhookService: WebhookService,
+    private readonly financeiroService: FinanceiroService,
+  ) {}
+
+  // Confirmação de pagamento PIX (Asaas). O token de segurança vem no header
+  // configurado no painel do gateway — sem ele o pedido é rejeitado (ver
+  // FinanceiroService.processarWebhookPagamento).
+  @Post('pagamento')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Recebe confirmação de pagamento PIX do gateway e credita o tenant' })
+  async pagamentoWebhook(
+    @Headers('asaas-access-token') token: string | undefined,
+    @Body() body: any,
+  ) {
+    return this.financeiroService.processarWebhookPagamento(token, body);
+  }
 
   // Verificação global do webhook pela Meta (sem slug — recomendado para multi-tenant)
   @Get('meta')

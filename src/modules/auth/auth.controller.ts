@@ -24,4 +24,12 @@ export class AuthController {
   me(@CurrentUser('id') userId: string) {
     return this.authService.me(userId);
   }
+
+  @Post('voltar-master')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Encerra a sessão de impersonação e volta ao token original do Master' })
+  voltarAoMaster(@CurrentUser() user: any) {
+    return this.authService.voltarAoMaster({ sub: user.id, email: user.email, role: user.role, tenant_id: user.tenant_id, impersonated_from: user.impersonated_from });
+  }
 }
