@@ -138,7 +138,7 @@ export class DmCampanhasService implements OnModuleInit {
 
       if (dto.salvar_como_modelo && dto.nome_modelo) {
         await tx.dmModeloMensagem.create({
-          data: { tenant_id: tenantId, nome: dto.nome_modelo, texto: dto.mensagem_texto, link_botao: dto.link_botao || null },
+          data: { tenant_id: tenantId, nome: dto.nome_modelo, texto: dto.mensagem_nucleo || dto.mensagem_texto, link_botao: dto.link_botao || null },
         });
       }
 

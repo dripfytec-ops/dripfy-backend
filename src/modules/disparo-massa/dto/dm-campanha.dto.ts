@@ -38,6 +38,9 @@ export class CreateDripifyCampanhaDto {
   @ApiPropertyOptional() @IsOptional() @IsString() foto_perfil_url?: string;
 
   @ApiProperty() @IsString() mensagem_texto: string;
+  // Só a parte variável ("novidade") da mensagem — usada pra salvar como
+  // modelo reutilizável, sem a saudação/rodapé fixos que já vêm em mensagem_texto.
+  @ApiPropertyOptional() @IsOptional() @IsString() mensagem_nucleo?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() link_botao?: string;
 
   @ApiPropertyOptional({ enum: DmMidiaTipo }) @IsOptional() @IsEnum(DmMidiaTipo) midia_tipo?: DmMidiaTipo;
