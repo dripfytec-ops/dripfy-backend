@@ -102,6 +102,15 @@ model Tenant {
   criado_em           DateTime           @default(now())
   atualizado_em       DateTime           @updatedAt
 
+  // ─── Assinatura mensal por usuários (seats) ─────────────────────────────
+  // Pacote Start: usuarios_inclusos (1 admin + 2 vendedores) por
+  // valor_mensalidade_base; cada usuário além disso soma valor_usuario_adicional.
+  usuarios_inclusos       Int      @default(3)
+  valor_mensalidade_base  Decimal  @default(300.00) @db.Decimal(10, 2)
+  valor_usuario_adicional Decimal  @default(50.00) @db.Decimal(10, 2)
+  proxima_cobranca_em     DateTime?
+  assinatura_bloqueada    Boolean  @default(false)
+
   users               User[]
   chatwoot_config     ChatwootConfig?
   leads               Lead[]
@@ -115,8 +124,36 @@ model Tenant {
   invoices            Invoice[]
   dm_modelos_mensagem DmModeloMensagem[]
   credito_transacoes  CreditoTransacao[]
+  mensalidade_faturas MensalidadeFatura[]
 
   @@map("tenants")
+}
+
+enum MensalidadeFaturaStatus {
+  pendente
+  pago
+  cancelado
+}
+
+model MensalidadeFatura {
+  id                String                  @id @default(uuid())
+  tenant_id         String
+  competencia       String // "2026-07" (ano-mês de referência da cobrança)
+  usuarios_cobrados Int
+  usuarios_extras   Int
+  valor_total       Decimal                 @db.Decimal(10, 2)
+  status            MensalidadeFaturaStatus @default(pendente)
+  vencimento        DateTime
+  pago_em           DateTime?
+  pix_qrcode_base64 String?                 @db.Text
+  pix_copia_cola    String?                 @db.Text
+  criado_em         DateTime                @default(now())
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  @@unique([tenant_id, competencia])
+  @@index([tenant_id, criado_em])
+  @@map("mensalidade_faturas")
 }
 
 model Invoice {

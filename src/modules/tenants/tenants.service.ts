@@ -65,11 +65,34 @@ export class TenantsService {
     return tenant;
   }
 
+  // [Master] Campanhas do tenant (aba "Disparos" do painel de Lojistas).
+  async listarCampanhas(tenantId: string) {
+    return this.prisma.dmCampanha.findMany({
+      where: { tenant_id: tenantId },
+      orderBy: { criado_em: 'desc' },
+      take: 50,
+      select: {
+        id: true, nome: true, tipo: true, status: true, prioridade: true,
+        total_contatos: true, enviados: true, entregues: true, falhas: true,
+        criado_em: true, agendado_para: true,
+      },
+    });
+  }
+
   async updateStatus(id: string, dto: UpdateTenantStatusDto) {
-    await this.findOne(id);
+    const tenant = await this.findOne(id);
+    const novoStatus = dto.status_assinatura as SubscriptionStatus;
+
+    // Primeira ativação (trial/inativo -> ativo): começa a contar o ciclo de
+    // cobrança de mensalidade a partir de agora, se ainda não tinha uma data definida.
+    const iniciandoCobranca = novoStatus === 'ativo' && tenant.status_assinatura !== 'ativo' && !tenant.proxima_cobranca_em;
+
     return this.prisma.tenant.update({
       where: { id },
-      data: { status_assinatura: dto.status_assinatura as SubscriptionStatus },
+      data: {
+        status_assinatura: novoStatus,
+        ...(iniciandoCobranca ? { proxima_cobranca_em: new Date() } : {}),
+      },
     });
   }
 }

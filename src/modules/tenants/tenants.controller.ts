@@ -12,6 +12,8 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { UserRole } from '@prisma/client';
 import { AuthService } from '../auth/auth.service';
 import { FinanceiroService } from '../financeiro/financeiro.service';
+import { AssinaturaService } from '../assinatura/assinatura.service';
+import { AtualizarPlanoDto } from '../assinatura/dto/atualizar-plano.dto';
 
 @ApiTags('tenants')
 @ApiBearerAuth()
@@ -23,6 +25,7 @@ export class TenantsController {
     private readonly tenantsService: TenantsService,
     private readonly authService: AuthService,
     private readonly financeiroService: FinanceiroService,
+    private readonly assinaturaService: AssinaturaService,
   ) {}
 
   @Post()
@@ -60,5 +63,29 @@ export class TenantsController {
   @ApiOperation({ summary: '[Master] Extrato (conta corrente) de créditos de um Tenant específico' })
   getExtrato(@Param('id') id: string) {
     return this.financeiroService.getExtrato(id);
+  }
+
+  @Get(':id/mensalidade')
+  @ApiOperation({ summary: '[Master] Plano, usuários e histórico de faturas de mensalidade de um Tenant' })
+  getMensalidade(@Param('id') id: string) {
+    return this.assinaturaService.getResumoParaMaster(id);
+  }
+
+  @Patch(':id/plano')
+  @ApiOperation({ summary: '[Master] Ajusta manualmente o plano (valores/usuários inclusos) de um Tenant específico' })
+  atualizarPlano(@Param('id') id: string, @Body() dto: AtualizarPlanoDto) {
+    return this.assinaturaService.atualizarPlano(id, dto);
+  }
+
+  @Patch(':id/faturas/:faturaId/confirmar-pagamento')
+  @ApiOperation({ summary: '[Master] Confirma manualmente o pagamento de uma fatura de mensalidade' })
+  confirmarPagamentoMensalidade(@Param('faturaId') faturaId: string) {
+    return this.assinaturaService.confirmarPagamento(faturaId);
+  }
+
+  @Get(':id/campanhas')
+  @ApiOperation({ summary: '[Master] Campanhas (Disparo Próprio + Dripfy) de um Tenant específico' })
+  getCampanhas(@Param('id') id: string) {
+    return this.tenantsService.listarCampanhas(id);
   }
 }

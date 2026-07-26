@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
 import { PrismaModule } from './prisma/prisma.module';
+import { AssinaturaGuard } from './common/guards/assinatura.guard';
 import { AuthModule } from './modules/auth/auth.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { UsersModule } from './modules/users/users.module';
@@ -14,6 +16,7 @@ import { BmTokensModule } from './modules/bm-tokens/bm-tokens.module';
 import { QuickRepliesModule } from './modules/quick-replies/quick-replies.module';
 import { FinanceiroModule } from './modules/financeiro/financeiro.module';
 import { AdminCampanhasJmdModule } from './modules/admin-campanhas-jmd/admin-campanhas-jmd.module';
+import { AssinaturaModule } from './modules/assinatura/assinatura.module';
 
 @Module({
   imports: [
@@ -32,6 +35,8 @@ import { AdminCampanhasJmdModule } from './modules/admin-campanhas-jmd/admin-cam
     QuickRepliesModule,
     FinanceiroModule,
     AdminCampanhasJmdModule,
+    AssinaturaModule,
   ],
+  providers: [{ provide: APP_GUARD, useClass: AssinaturaGuard }],
 })
 export class AppModule {}

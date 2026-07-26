@@ -4,9 +4,10 @@ import { TenantsService } from './tenants.service';
 import { EtiquetasModule } from '../etiquetas/etiquetas.module';
 import { AuthModule } from '../auth/auth.module';
 import { FinanceiroModule } from '../financeiro/financeiro.module';
+import { AssinaturaModule } from '../assinatura/assinatura.module';
 
 @Module({
-  imports: [EtiquetasModule, AuthModule, FinanceiroModule],
+  imports: [EtiquetasModule, AuthModule, FinanceiroModule, AssinaturaModule],
   controllers: [TenantsController],
   providers: [TenantsService],
   exports: [TenantsService],
