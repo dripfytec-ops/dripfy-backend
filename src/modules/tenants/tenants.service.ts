@@ -1,7 +1,7 @@
 import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../../prisma/prisma.service';
-import { CreateTenantDto, UpdateTenantStatusDto } from './dto/create-tenant.dto';
+import { CreateTenantDto, UpdateTenantStatusDto, AtualizarDadosCadastraisDto } from './dto/create-tenant.dto';
 import { UserRole, SubscriptionStatus } from '@prisma/client';
 import { EtiquetasService } from '../etiquetas/etiquetas.service';
 
@@ -19,6 +19,10 @@ export class TenantsService {
       data: {
         nome_empresa: dto.nome_empresa,
         slug: dto.slug,
+        cnpj: dto.cnpj,
+        telefone: dto.telefone,
+        nome_responsavel: dto.nome_responsavel,
+        email_contato: dto.email_contato,
         status_assinatura: SubscriptionStatus.trial,
         users: {
           create: {
@@ -75,6 +79,20 @@ export class TenantsService {
         id: true, nome: true, tipo: true, status: true, prioridade: true,
         total_contatos: true, enviados: true, entregues: true, falhas: true,
         criado_em: true, agendado_para: true,
+      },
+    });
+  }
+
+  async atualizarDadosCadastrais(id: string, dto: AtualizarDadosCadastraisDto) {
+    await this.findOne(id);
+    return this.prisma.tenant.update({
+      where: { id },
+      data: {
+        ...(dto.nome_empresa != null ? { nome_empresa: dto.nome_empresa } : {}),
+        ...(dto.cnpj != null ? { cnpj: dto.cnpj } : {}),
+        ...(dto.telefone != null ? { telefone: dto.telefone } : {}),
+        ...(dto.nome_responsavel != null ? { nome_responsavel: dto.nome_responsavel } : {}),
+        ...(dto.email_contato != null ? { email_contato: dto.email_contato } : {}),
       },
     });
   }

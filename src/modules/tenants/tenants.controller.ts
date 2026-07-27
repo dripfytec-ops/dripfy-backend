@@ -4,7 +4,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { TenantsService } from './tenants.service';
-import { CreateTenantDto, UpdateTenantStatusDto } from './dto/create-tenant.dto';
+import { CreateTenantDto, UpdateTenantStatusDto, AtualizarDadosCadastraisDto } from './dto/create-tenant.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -47,6 +47,12 @@ export class TenantsController {
     return this.tenantsService.findOne(id);
   }
 
+  @Patch(':id/dados-cadastrais')
+  @ApiOperation({ summary: '[Master] Atualiza dados cadastrais (CNPJ, telefone, responsável, e-mail) de um Tenant' })
+  atualizarDadosCadastrais(@Param('id') id: string, @Body() dto: AtualizarDadosCadastraisDto) {
+    return this.tenantsService.atualizarDadosCadastrais(id, dto);
+  }
+
   @Patch(':id/status')
   @ApiOperation({ summary: '[Master] Altera status de assinatura do Tenant' })
   updateStatus(@Param('id') id: string, @Body() dto: UpdateTenantStatusDto) {
@@ -81,6 +87,12 @@ export class TenantsController {
   @ApiOperation({ summary: '[Master] Confirma manualmente o pagamento de uma fatura de mensalidade' })
   confirmarPagamentoMensalidade(@Param('faturaId') faturaId: string) {
     return this.assinaturaService.confirmarPagamento(faturaId);
+  }
+
+  @Patch(':id/cobrancas-avulsas/:cobrancaId/confirmar-pagamento')
+  @ApiOperation({ summary: '[Master] Confirma manualmente o pagamento de uma cobrança avulsa de usuário extra' })
+  confirmarPagamentoAvulso(@Param('cobrancaId') cobrancaId: string) {
+    return this.assinaturaService.confirmarPagamentoAvulso(cobrancaId);
   }
 
   @Get(':id/campanhas')

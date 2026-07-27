@@ -5,7 +5,7 @@ import { montarPayloadPixEstatico } from '../../common/utils/pix.util';
 import { AtualizarPlanoDto } from './dto/atualizar-plano.dto';
 
 const DIAS_CARENCIA = 5;
-const ROLES_QUE_CONTAM_COMO_ASSENTO: UserRole[] = ['lojista_admin', 'atendente'];
+export const ROLES_QUE_CONTAM_COMO_ASSENTO: UserRole[] = ['lojista_admin', 'atendente'];
 
 @Injectable()
 export class AssinaturaService implements OnModuleInit {
@@ -141,11 +141,10 @@ export class AssinaturaService implements OnModuleInit {
     const usuarios = await this.contarUsuarios(tenantId);
     const { usuariosExtras, valorTotal } = this.calcularValorMensal(tenant, usuarios);
 
-    const faturas = await this.prisma.mensalidadeFatura.findMany({
-      where: { tenant_id: tenantId },
-      orderBy: { criado_em: 'desc' },
-      take: 24,
-    });
+    const [faturas, cobrancasAvulsas] = await Promise.all([
+      this.prisma.mensalidadeFatura.findMany({ where: { tenant_id: tenantId }, orderBy: { criado_em: 'desc' }, take: 24 }),
+      this.listarCobrancasAvulsas(tenantId),
+    ]);
 
     return {
       usuarios_inclusos: tenant.usuarios_inclusos,
@@ -157,6 +156,7 @@ export class AssinaturaService implements OnModuleInit {
       assinatura_bloqueada: tenant.assinatura_bloqueada,
       proxima_cobranca_em: tenant.proxima_cobranca_em,
       faturas,
+      cobrancas_avulsas: cobrancasAvulsas,
     };
   }
 
@@ -188,14 +188,64 @@ export class AssinaturaService implements OnModuleInit {
       data: { status: 'pago', pago_em: new Date() },
     });
 
-    // Só desbloqueia se não houver nenhuma outra fatura vencida em aberto.
-    const outraPendenteVencida = await this.prisma.mensalidadeFatura.findFirst({
-      where: { tenant_id: fatura.tenant_id, status: 'pendente', vencimento: { lt: new Date() } },
-    });
-    if (!outraPendenteVencida) {
-      await this.prisma.tenant.update({ where: { id: fatura.tenant_id }, data: { assinatura_bloqueada: false } });
-    }
-
+    await this.reavaliarBloqueio(fatura.tenant_id);
     return atualizada;
+  }
+
+  // Ao criar um usuário além dos inclusos no plano, gera uma cobrança avulsa
+  // (paga antecipadamente, não espera o ciclo mensal) e já bloqueia a
+  // assinatura até a confirmação — mesmo mecanismo da mensalidade em atraso.
+  async criarCobrancaSeExcedeuPlano(tenantId: string, userId: string) {
+    const tenant = await this.prisma.tenant.findUniqueOrThrow({ where: { id: tenantId } });
+    const usuarios = await this.contarUsuarios(tenantId);
+    if (usuarios <= tenant.usuarios_inclusos) return null;
+
+    const valor = Number(tenant.valor_usuario_adicional);
+    const pixCopiaCola = montarPayloadPixEstatico(valor);
+
+    const cobranca = await this.prisma.cobrancaAvulsaUsuario.create({
+      data: { tenant_id: tenantId, user_id: userId, valor, pix_copia_cola: pixCopiaCola },
+    });
+    await this.prisma.tenant.update({ where: { id: tenantId }, data: { assinatura_bloqueada: true } });
+
+    return cobranca;
+  }
+
+  // [Master] Confirma pagamento de uma cobrança avulsa de usuário extra.
+  async confirmarPagamentoAvulso(cobrancaId: string) {
+    const cobranca = await this.prisma.cobrancaAvulsaUsuario.findUnique({ where: { id: cobrancaId } });
+    if (!cobranca) throw new NotFoundException('Cobrança não encontrada.');
+    if (cobranca.status === 'pago') return cobranca;
+
+    const atualizada = await this.prisma.cobrancaAvulsaUsuario.update({
+      where: { id: cobrancaId },
+      data: { status: 'pago', pago_em: new Date() },
+    });
+
+    await this.reavaliarBloqueio(cobranca.tenant_id);
+    return atualizada;
+  }
+
+  // Reavalia se o tenant ainda deve ficar bloqueado após uma confirmação de
+  // pagamento — só desbloqueia se não sobrar nenhuma pendência (fatura mensal
+  // vencida ou cobrança avulsa de usuário extra).
+  private async reavaliarBloqueio(tenantId: string) {
+    const [faturaVencida, avulsaPendente] = await Promise.all([
+      this.prisma.mensalidadeFatura.findFirst({ where: { tenant_id: tenantId, status: 'pendente', vencimento: { lt: new Date() } } }),
+      this.prisma.cobrancaAvulsaUsuario.findFirst({ where: { tenant_id: tenantId, status: 'pendente' } }),
+    ]);
+    if (!faturaVencida && !avulsaPendente) {
+      await this.prisma.tenant.update({ where: { id: tenantId }, data: { assinatura_bloqueada: false } });
+    }
+  }
+
+  // [Master] Histórico de cobranças avulsas de usuário extra de um tenant.
+  async listarCobrancasAvulsas(tenantId: string) {
+    return this.prisma.cobrancaAvulsaUsuario.findMany({
+      where: { tenant_id: tenantId },
+      orderBy: { criado_em: 'desc' },
+      take: 24,
+      include: { user: { select: { nome: true, email: true } } },
+    });
   }
 }

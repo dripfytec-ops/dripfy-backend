@@ -3,6 +3,7 @@ import * as bcrypt from 'bcryptjs';
 import { IsString, IsEmail, IsOptional, IsEnum, MinLength, IsNotEmpty } from 'class-validator';
 import { PrismaService } from '../../prisma/prisma.service';
 import { UserRole } from '@prisma/client';
+import { AssinaturaService, ROLES_QUE_CONTAM_COMO_ASSENTO } from '../assinatura/assinatura.service';
 
 export class CreateUserDto {
   @IsString()
@@ -33,7 +34,10 @@ export class UpdateUserDto {
 
 @Injectable()
 export class UsersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private assinatura: AssinaturaService,
+  ) {}
 
   async create(tenantId: string, dto: CreateUserDto) {
     const exists = await this.prisma.user.findFirst({
@@ -42,10 +46,19 @@ export class UsersService {
     if (exists) throw new ConflictException('E-mail já cadastrado neste tenant.');
 
     const password_hash = await bcrypt.hash(dto.password, 12);
-    return this.prisma.user.create({
+    const user = await this.prisma.user.create({
       data: { tenant_id: tenantId, nome: dto.nome, email: dto.email, password_hash, role: dto.role },
       select: { id: true, nome: true, email: true, role: true, ativo: true },
     });
+
+    // Usuário além do plano (assento extra): gera cobrança avulsa paga
+    // antecipadamente, na hora, em vez de esperar o próximo ciclo mensal.
+    let cobranca_pendente: Awaited<ReturnType<AssinaturaService['criarCobrancaSeExcedeuPlano']>> = null;
+    if (ROLES_QUE_CONTAM_COMO_ASSENTO.includes(dto.role)) {
+      cobranca_pendente = await this.assinatura.criarCobrancaSeExcedeuPlano(tenantId, user.id);
+    }
+
+    return { ...user, cobranca_pendente };
   }
 
   async findAll(tenantId: string) {

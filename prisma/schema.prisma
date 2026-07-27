@@ -97,6 +97,10 @@ model Tenant {
   id                  String             @id @default(uuid())
   nome_empresa        String
   slug                String             @unique
+  cnpj                String?
+  telefone            String?
+  nome_responsavel    String?
+  email_contato       String?
   status_assinatura   SubscriptionStatus @default(trial)
   creditos_saldo      Int                @default(0)
   criado_em           DateTime           @default(now())
@@ -125,8 +129,34 @@ model Tenant {
   dm_modelos_mensagem DmModeloMensagem[]
   credito_transacoes  CreditoTransacao[]
   mensalidade_faturas MensalidadeFatura[]
+  cobrancas_avulsas_usuario CobrancaAvulsaUsuario[]
 
   @@map("tenants")
+}
+
+enum CobrancaAvulsaStatus {
+  pendente
+  pago
+  cancelado
+}
+
+// Cobrança única, gerada na hora, quando o lojista cria um usuário além dos
+// inclusos no plano — pago antecipadamente (não espera o ciclo mensal).
+model CobrancaAvulsaUsuario {
+  id             String               @id @default(uuid())
+  tenant_id      String
+  user_id        String
+  valor          Decimal              @db.Decimal(10, 2)
+  status         CobrancaAvulsaStatus @default(pendente)
+  pix_copia_cola String?              @db.Text
+  criado_em      DateTime             @default(now())
+  pago_em        DateTime?
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id, criado_em])
+  @@map("cobrancas_avulsas_usuario")
 }
 
 enum MensalidadeFaturaStatus {
@@ -208,6 +238,7 @@ model User {
   tenant          Tenant    @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   leads_vendedor  Lead[]    @relation("LeadVendedor")
   campanhas_vendedor DmCampanha[] @relation("DmCampanhaVendedor")
+  cobrancas_avulsas CobrancaAvulsaUsuario[]
 
   @@unique([tenant_id, email])
   @@map("users")
