@@ -23,6 +23,9 @@ const EXT_BY_MIME: Record<string, string> = {
   'audio/amr': 'amr',
   'audio/webm': 'webm',
   'application/pdf': 'pdf',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+  'application/vnd.ms-excel': 'xls',
+  'text/csv': 'csv',
 };
 
 @Injectable()

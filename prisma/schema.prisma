@@ -130,8 +130,35 @@ model Tenant {
   credito_transacoes  CreditoTransacao[]
   mensalidade_faturas MensalidadeFatura[]
   cobrancas_avulsas_usuario CobrancaAvulsaUsuario[]
+  enriquecimento_solicitacoes EnriquecimentoSolicitacao[]
 
   @@map("tenants")
+}
+
+enum EnriquecimentoStatus {
+  pendente
+  concluido
+}
+
+// Higienização/enriquecimento de telefones dos leads: o lojista sobe uma
+// planilha, o Master trata manualmente (fora do sistema) e devolve a
+// planilha já higienizada.
+model EnriquecimentoSolicitacao {
+  id                     String               @id @default(uuid())
+  tenant_id              String
+  nome_arquivo_original   String
+  arquivo_original_url    String
+  observacoes             String?
+  status                  EnriquecimentoStatus @default(pendente)
+  arquivo_processado_url  String?
+  concluido_em            DateTime?
+  concluido_por           String?
+  criado_em               DateTime             @default(now())
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id, criado_em])
+  @@map("enriquecimento_solicitacoes")
 }
 
 enum CobrancaAvulsaStatus {

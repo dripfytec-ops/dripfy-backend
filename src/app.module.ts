@@ -17,6 +17,7 @@ import { QuickRepliesModule } from './modules/quick-replies/quick-replies.module
 import { FinanceiroModule } from './modules/financeiro/financeiro.module';
 import { AdminCampanhasJmdModule } from './modules/admin-campanhas-jmd/admin-campanhas-jmd.module';
 import { AssinaturaModule } from './modules/assinatura/assinatura.module';
+import { EnriquecimentoModule } from './modules/enriquecimento/enriquecimento.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { AssinaturaModule } from './modules/assinatura/assinatura.module';
     FinanceiroModule,
     AdminCampanhasJmdModule,
     AssinaturaModule,
+    EnriquecimentoModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: AssinaturaGuard }],
 })
