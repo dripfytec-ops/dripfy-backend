@@ -106,6 +106,11 @@ model Tenant {
   criado_em           DateTime           @default(now())
   atualizado_em       DateTime           @updatedAt
 
+  // ─── Saldo de enriquecimento (higienização de leads) — independente do
+  // saldo de disparo acima; fornecedor/custo diferentes. 1 crédito = 1 lead.
+  creditos_enriquecimento_saldo Int     @default(0)
+  valor_credito_enriquecimento  Decimal @default(0.07) @db.Decimal(10, 2)
+
   // ─── Assinatura mensal por usuários (seats) ─────────────────────────────
   // Pacote Start: usuarios_inclusos (1 admin + 2 vendedores) por
   // valor_mensalidade_base; cada usuário além disso soma valor_usuario_adicional.
@@ -131,6 +136,8 @@ model Tenant {
   mensalidade_faturas MensalidadeFatura[]
   cobrancas_avulsas_usuario CobrancaAvulsaUsuario[]
   enriquecimento_solicitacoes EnriquecimentoSolicitacao[]
+  enriquecimento_transacoes EnriquecimentoTransacao[]
+  enriquecimento_compras   EnriquecimentoCompraCredito[]
 
   @@map("tenants")
 }
@@ -148,6 +155,7 @@ model EnriquecimentoSolicitacao {
   tenant_id              String
   nome_arquivo_original   String
   arquivo_original_url    String
+  quantidade_leads        Int                  @default(0)
   observacoes             String?
   status                  EnriquecimentoStatus @default(pendente)
   arquivo_processado_url  String?
@@ -159,6 +167,54 @@ model EnriquecimentoSolicitacao {
 
   @@index([tenant_id, criado_em])
   @@map("enriquecimento_solicitacoes")
+}
+
+// ─── Segundo saldo (conta corrente separada): higienização de leads ────────
+// Fornecedor/custo diferentes do saldo de disparo (creditos_saldo), por isso
+// são dois saldos independentes — comprar/consumir um não afeta o outro.
+enum EnriquecimentoTransacaoTipo {
+  compra
+  consumo
+  ajuste
+}
+
+model EnriquecimentoTransacao {
+  id             String                      @id @default(uuid())
+  tenant_id      String
+  tipo           EnriquecimentoTransacaoTipo
+  quantidade     Int // positivo = entrada (compra), negativo = saída (consumo)
+  saldo_apos     Int
+  descricao      String
+  solicitacao_id String?
+  compra_id      String?
+  criado_em      DateTime                    @default(now())
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id, criado_em])
+  @@map("enriquecimento_transacoes")
+}
+
+enum EnriquecimentoCompraStatus {
+  pendente
+  pago
+  cancelado
+}
+
+model EnriquecimentoCompraCredito {
+  id                  String                     @id @default(uuid())
+  tenant_id           String
+  quantidade_creditos Int
+  valor_total         Decimal                    @db.Decimal(10, 2)
+  status              EnriquecimentoCompraStatus @default(pendente)
+  pix_copia_cola      String?                    @db.Text
+  criado_em           DateTime                   @default(now())
+  pago_em             DateTime?
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id, criado_em])
+  @@map("enriquecimento_compras_credito")
 }
 
 enum CobrancaAvulsaStatus {

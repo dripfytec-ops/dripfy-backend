@@ -23,16 +23,29 @@ export class EnriquecimentoController {
   async upload(
     @UploadedFile() file: Express.Multer.File,
     @Body('observacoes') observacoes: string,
+    @Body('quantidade_leads') quantidadeLeads: string,
     @CurrentUser('tenant_id') tenantId: string,
   ) {
     if (!file) throw new BadRequestException('Nenhum arquivo enviado.');
     const relativeUrl = this.mediaService.saveBuffer(file.buffer, file.mimetype);
-    return this.service.criar(tenantId, file.originalname, this.mediaService.publicUrl(relativeUrl), observacoes);
+    return this.service.criar(tenantId, file.originalname, this.mediaService.publicUrl(relativeUrl), Number(quantidadeLeads), observacoes);
   }
 
   @Get()
   @ApiOperation({ summary: 'Lista as solicitações de enriquecimento do tenant' })
   listar(@CurrentUser('tenant_id') tenantId: string) {
     return this.service.listar(tenantId);
+  }
+
+  @Get('saldo')
+  @ApiOperation({ summary: 'Saldo e extrato de créditos de enriquecimento do tenant' })
+  getSaldo(@CurrentUser('tenant_id') tenantId: string) {
+    return this.service.getSaldoEExtrato(tenantId);
+  }
+
+  @Post('comprar-creditos')
+  @ApiOperation({ summary: 'Gera cobrança PIX pra compra de créditos de enriquecimento' })
+  comprarCreditos(@CurrentUser('tenant_id') tenantId: string, @Body('quantidade') quantidade: number) {
+    return this.service.comprarCreditos(tenantId, Number(quantidade));
   }
 }

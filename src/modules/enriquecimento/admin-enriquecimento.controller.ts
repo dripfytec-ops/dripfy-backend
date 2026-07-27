@@ -1,4 +1,4 @@
-import { BadRequestException, Controller, Get, Param, Post, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Param, Patch, Post, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { EnriquecimentoService } from './enriquecimento.service';
@@ -38,5 +38,17 @@ export class AdminEnriquecimentoController {
     if (!file) throw new BadRequestException('Nenhum arquivo enviado.');
     const relativeUrl = this.mediaService.saveBuffer(file.buffer, file.mimetype);
     return this.service.concluir(id, this.mediaService.publicUrl(relativeUrl), nomeMaster);
+  }
+
+  @Get('compras')
+  @ApiOperation({ summary: '[Master] Lista compras de créditos de enriquecimento (todos os tenants)' })
+  listarCompras() {
+    return this.service.listarComprasParaMaster();
+  }
+
+  @Patch('compras/:id/confirmar-pagamento')
+  @ApiOperation({ summary: '[Master] Confirma manualmente o pagamento de uma compra de créditos de enriquecimento' })
+  confirmarPagamentoCompra(@Param('id') id: string) {
+    return this.service.confirmarPagamentoCompra(id);
   }
 }

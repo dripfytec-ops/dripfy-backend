@@ -71,6 +71,18 @@ export class TenantsController {
     return this.financeiroService.getExtrato(id);
   }
 
+  @Get(':id/invoices-pendentes')
+  @ApiOperation({ summary: '[Master] Cobranças de créditos Dripfy pendentes de um Tenant específico' })
+  getInvoicesPendentes(@Param('id') id: string) {
+    return this.financeiroService.listarInvoicesPendentes(id);
+  }
+
+  @Patch(':id/invoices/:invoiceId/confirmar-pagamento')
+  @ApiOperation({ summary: '[Master] Confirma manualmente o pagamento de uma cobrança de créditos Dripfy' })
+  confirmarPagamentoInvoice(@Param('invoiceId') invoiceId: string) {
+    return this.financeiroService.confirmarPagamentoManual(invoiceId);
+  }
+
   @Get(':id/mensalidade')
   @ApiOperation({ summary: '[Master] Plano, usuários e histórico de faturas de mensalidade de um Tenant' })
   getMensalidade(@Param('id') id: string) {

@@ -18,6 +18,12 @@ export class FinanceiroController {
     return this.financeiroService.comprarCreditos(tenantId, dto);
   }
 
+  @Post('comprar-creditos-manual')
+  @ApiOperation({ summary: 'Gera cobrança PIX manual (valor fixo), sem depender do gateway automático' })
+  comprarCreditosManual(@CurrentUser('tenant_id') tenantId: string, @Body('quantidade') quantidade: number) {
+    return this.financeiroService.gerarCobrancaManual(tenantId, Number(quantidade));
+  }
+
   @Get('invoices/:id')
   @ApiOperation({ summary: 'Status de uma cobrança (usado pelo polling do modal PIX)' })
   getInvoice(@CurrentUser('tenant_id') tenantId: string, @Param('id') id: string) {

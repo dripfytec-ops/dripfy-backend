@@ -1,8 +1,9 @@
-import { Injectable, Logger, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PixGatewayService } from './pix-gateway.service';
 import { ComprarCreditosDto } from './dto/financeiro.dto';
+import { montarPayloadPixEstatico } from '../../common/utils/pix.util';
 
 // Eventos da Asaas que indicam pagamento confirmado. Ajustar/expandir se o
 // gateway definitivo for outro (ex: Mercado Pago usa 'payment.updated' +
@@ -62,6 +63,61 @@ export class FinanceiroService {
     }
   }
 
+  // Cobrança PIX com valor fixo já embutido no QR, sem depender do gateway
+  // automático (Asaas não configurado) — Master confirma o pagamento
+  // manualmente, mesmo esquema usado em mensalidade/enriquecimento.
+  async gerarCobrancaManual(tenantId: string, quantidade: number) {
+    if (!quantidade || quantidade <= 0) throw new BadRequestException('Quantidade inválida.');
+    const valorTotal = Math.round(quantidade * PRECO_CREDITO * 100) / 100;
+    const pixCopiaCola = montarPayloadPixEstatico(valorTotal);
+
+    return this.prisma.invoice.create({
+      data: {
+        tenant_id: tenantId,
+        quantidade_creditos: quantidade,
+        valor_total: valorTotal,
+        gateway: 'manual',
+        pix_copia_cola: pixCopiaCola,
+      },
+    });
+  }
+
+  // [Master] Confirma manualmente o pagamento de uma cobrança gerada via
+  // gerarCobrancaManual (gateway: 'manual' — nunca chega webhook pra essas).
+  async confirmarPagamentoManual(invoiceId: string) {
+    const invoice = await this.prisma.invoice.findUnique({ where: { id: invoiceId } });
+    if (!invoice) throw new NotFoundException('Cobrança não encontrada.');
+    if (invoice.status === 'pago') return invoice;
+
+    const atualizada = await this.prisma.$transaction(async (tx) => {
+      const inv = await tx.invoice.update({ where: { id: invoiceId }, data: { status: 'pago', pago_em: new Date() } });
+      const tenantAtualizado = await tx.tenant.update({
+        where: { id: invoice.tenant_id },
+        data: { creditos_saldo: { increment: invoice.quantidade_creditos } },
+      });
+      await this.registrarTransacao(tx, {
+        tenantId: invoice.tenant_id,
+        tipo: 'compra',
+        quantidade: invoice.quantidade_creditos,
+        saldoApos: tenantAtualizado.creditos_saldo,
+        descricao: `Compra de ${invoice.quantidade_creditos} créditos via PIX`,
+        invoiceId: invoice.id,
+      });
+      return inv;
+    });
+
+    await this.retomarCampanhasAguardandoRecarga(invoice.tenant_id);
+    return atualizada;
+  }
+
+  // [Master] Cobranças de créditos Dripfy pendentes de um tenant específico.
+  async listarInvoicesPendentes(tenantId: string) {
+    return this.prisma.invoice.findMany({
+      where: { tenant_id: tenantId, status: 'pendente' },
+      orderBy: { criado_em: 'desc' },
+    });
+  }
+
   async getInvoice(tenantId: string, invoiceId: string) {
     const invoice = await this.prisma.invoice.findFirst({ where: { id: invoiceId, tenant_id: tenantId } });
     if (!invoice) throw new NotFoundException('Cobrança não encontrada.');
@@ -87,7 +143,7 @@ export class FinanceiroService {
         take: limit,
       }),
     ]);
-    return { creditos_saldo: saldo.creditos_saldo, transacoes };
+    return { creditos_saldo: saldo.creditos_saldo, valor_credito: PRECO_CREDITO, transacoes };
   }
 
   // Registra uma transação no ledger e retorna o registro criado. Não mexe
