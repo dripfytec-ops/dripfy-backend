@@ -28,7 +28,7 @@ export class EtiquetasService {
     });
   }
 
-  async create(tenantId: string, dto: { nome: string; cor_hexadecimal: string; ordem?: number }) {
+  async create(tenantId: string, dto: { nome: string; cor_hexadecimal: string; ordem?: number }, criadoPor: string) {
     const count = await this.prisma.etiqueta.count({ where: { tenant_id: tenantId } });
     return this.prisma.etiqueta.create({
       data: {
@@ -36,6 +36,7 @@ export class EtiquetasService {
         nome: dto.nome,
         cor_hexadecimal: dto.cor_hexadecimal,
         ordem: dto.ordem ?? count,
+        criado_por: criadoPor,
       },
     });
   }

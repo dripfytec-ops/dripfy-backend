@@ -20,16 +20,17 @@ export class EtiquetasController {
   }
 
   @Post()
-  @Roles(UserRole.admin_master, UserRole.lojista_admin)
+  @Roles(UserRole.admin_master, UserRole.lojista_admin, UserRole.atendente)
   create(
     @CurrentUser('tenant_id') tenantId: string,
+    @CurrentUser('nome') nome: string,
     @Body() dto: { nome: string; cor_hexadecimal: string; ordem?: number },
   ) {
-    return this.service.create(tenantId, dto);
+    return this.service.create(tenantId, dto, nome);
   }
 
   @Patch(':id')
-  @Roles(UserRole.admin_master, UserRole.lojista_admin)
+  @Roles(UserRole.admin_master, UserRole.lojista_admin, UserRole.atendente)
   update(
     @CurrentUser('tenant_id') tenantId: string,
     @Param('id') id: string,
@@ -39,7 +40,7 @@ export class EtiquetasController {
   }
 
   @Delete(':id')
-  @Roles(UserRole.admin_master, UserRole.lojista_admin)
+  @Roles(UserRole.admin_master, UserRole.lojista_admin, UserRole.atendente)
   remove(@CurrentUser('tenant_id') tenantId: string, @Param('id') id: string) {
     return this.service.remove(tenantId, id);
   }

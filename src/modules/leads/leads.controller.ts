@@ -136,6 +136,16 @@ export class LeadsController {
     return this.leadsService.getActivities(tenantId, id);
   }
 
+  @Patch(':id/encerrar')
+  @ApiOperation({ summary: 'Encerra a conversa (some da esteira geral, vai pra aba Encerradas)' })
+  encerrar(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser('tenant_id') tenantId: string,
+    @CurrentUser('nome') userName: string,
+  ) {
+    return this.leadsService.encerrar(tenantId, id, userName);
+  }
+
   @Patch(':id/read')
   @ApiOperation({ summary: 'Marca a conversa do lead como lida ou não lida' })
   markRead(

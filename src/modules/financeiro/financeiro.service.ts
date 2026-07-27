@@ -15,6 +15,7 @@ const EVENTOS_PAGAMENTO_CONFIRMADO = ['PAYMENT_RECEIVED', 'PAYMENT_CONFIRMED'];
 // nunca vem do cliente (evita fraude), sempre calculado aqui.
 export const PRECO_CREDITO = 0.27;
 export const CUSTO_CREDITO_JMD = 0.18;
+export const QUANTIDADE_MINIMA_COMPRA = 2000;
 
 @Injectable()
 export class FinanceiroService {
@@ -67,7 +68,9 @@ export class FinanceiroService {
   // automático (Asaas não configurado) — Master confirma o pagamento
   // manualmente, mesmo esquema usado em mensalidade/enriquecimento.
   async gerarCobrancaManual(tenantId: string, quantidade: number) {
-    if (!quantidade || quantidade <= 0) throw new BadRequestException('Quantidade inválida.');
+    if (!quantidade || quantidade < QUANTIDADE_MINIMA_COMPRA) {
+      throw new BadRequestException(`Quantidade mínima é ${QUANTIDADE_MINIMA_COMPRA} créditos.`);
+    }
     const valorTotal = Math.round(quantidade * PRECO_CREDITO * 100) / 100;
     const pixCopiaCola = montarPayloadPixEstatico(valorTotal);
 

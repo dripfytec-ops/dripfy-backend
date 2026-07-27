@@ -20,13 +20,17 @@ export class QuickRepliesController {
   }
 
   @Post()
-  @Roles(UserRole.admin_master, UserRole.lojista_admin)
-  create(@CurrentUser('tenant_id') tenantId: string, @Body() dto: { titulo: string; texto: string }) {
-    return this.service.create(tenantId, dto);
+  @Roles(UserRole.admin_master, UserRole.lojista_admin, UserRole.atendente)
+  create(
+    @CurrentUser('tenant_id') tenantId: string,
+    @CurrentUser('nome') nome: string,
+    @Body() dto: { titulo: string; texto: string },
+  ) {
+    return this.service.create(tenantId, dto, nome);
   }
 
   @Patch(':id')
-  @Roles(UserRole.admin_master, UserRole.lojista_admin)
+  @Roles(UserRole.admin_master, UserRole.lojista_admin, UserRole.atendente)
   update(
     @CurrentUser('tenant_id') tenantId: string,
     @Param('id') id: string,
@@ -36,7 +40,7 @@ export class QuickRepliesController {
   }
 
   @Delete(':id')
-  @Roles(UserRole.admin_master, UserRole.lojista_admin)
+  @Roles(UserRole.admin_master, UserRole.lojista_admin, UserRole.atendente)
   remove(@CurrentUser('tenant_id') tenantId: string, @Param('id') id: string) {
     return this.service.remove(tenantId, id);
   }

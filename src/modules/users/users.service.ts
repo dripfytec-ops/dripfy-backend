@@ -39,7 +39,13 @@ export class UsersService {
     private assinatura: AssinaturaService,
   ) {}
 
-  async create(tenantId: string, dto: CreateUserDto) {
+  async create(tenantId: string, dto: CreateUserDto, callerRole: string) {
+    // Admin do lojista só pode criar vendedores — só o Master pode criar
+    // outro admin de loja (via criação do tenant ou impersonando).
+    if (callerRole === UserRole.lojista_admin && dto.role !== UserRole.atendente) {
+      throw new ForbiddenException('Admin da loja só pode criar usuários vendedores.');
+    }
+
     const exists = await this.prisma.user.findFirst({
       where: { tenant_id: tenantId, email: dto.email },
     });

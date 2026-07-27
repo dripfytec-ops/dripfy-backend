@@ -347,6 +347,7 @@ model Etiqueta {
   cor_hexadecimal String   @default("#6B7280")
   ordem           Int      @default(0)
   slug            String?
+  criado_por      String?
   criado_em       DateTime @default(now())
   atualizado_em   DateTime @updatedAt
 
@@ -364,6 +365,7 @@ model QuickReply {
   tenant_id     String
   titulo        String
   texto         String
+  criado_por    String?
   criado_em     DateTime @default(now())
   atualizado_em DateTime @updatedAt
 

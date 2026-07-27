@@ -17,8 +17,12 @@ export class UsersController {
   @Post()
   @Roles(UserRole.admin_master, UserRole.lojista_admin)
   @ApiOperation({ summary: 'Cria novo usuário no tenant' })
-  create(@CurrentUser('tenant_id') tenantId: string, @Body() dto: CreateUserDto) {
-    return this.usersService.create(tenantId, dto);
+  create(
+    @CurrentUser('tenant_id') tenantId: string,
+    @CurrentUser('role') callerRole: string,
+    @Body() dto: CreateUserDto,
+  ) {
+    return this.usersService.create(tenantId, dto, callerRole);
   }
 
   @Get()

@@ -77,6 +77,10 @@ export class FilterLeadsDto {
   @IsString()
   vendedor_id?: string;
 
+  @ApiPropertyOptional({ description: 'true = mostra só conversas encerradas; padrão exclui as encerradas' })
+  @IsOptional()
+  encerradas?: boolean;
+
   @ApiPropertyOptional()
   @IsOptional()
   page?: number;

@@ -12,9 +12,9 @@ export class QuickRepliesService {
     });
   }
 
-  async create(tenantId: string, dto: { titulo: string; texto: string }) {
+  async create(tenantId: string, dto: { titulo: string; texto: string }, criadoPor: string) {
     return this.prisma.quickReply.create({
-      data: { tenant_id: tenantId, titulo: dto.titulo, texto: dto.texto },
+      data: { tenant_id: tenantId, titulo: dto.titulo, texto: dto.texto, criado_por: criadoPor },
     });
   }
 

@@ -103,6 +103,11 @@ export class LeadsService {
       and.push({ OR: [{ vendedor_id: userId }, { vendedor_id: null }] });
     }
 
+    // Conversas encerradas saem da esteira geral (Minhas/Todas) e só
+    // aparecem na aba "Encerradas".
+    const mostrarEncerradas = String(filters.encerradas) === 'true';
+    where.status_atual = mostrarEncerradas ? 'finalizado' : { not: 'finalizado' };
+
     if (filters.etiqueta_id) where.etiquetas = { some: { id: filters.etiqueta_id } };
     if (filters.origem_campanha_id) where.origem_campanha_id = filters.origem_campanha_id;
     if (filters.vendedor_id) where.vendedor_id = filters.vendedor_id;
@@ -183,6 +188,21 @@ export class LeadsService {
       });
     }
 
+    return updated;
+  }
+
+  // Encerra a conversa: some da esteira geral (Minhas/Todas) e passa a
+  // aparecer só na aba "Encerradas".
+  async encerrar(tenantId: string, leadId: number, userName: string) {
+    const lead = await this.prisma.lead.findFirst({ where: { id_number: leadId, tenant_id: tenantId } });
+    if (!lead) throw new NotFoundException('Lead não encontrado.');
+
+    const [updated] = await this.prisma.$transaction([
+      this.prisma.lead.update({ where: { id_number: leadId }, data: { status_atual: 'finalizado' }, include: LEAD_INCLUDE }),
+      this.prisma.leadActivity.create({
+        data: { tenant_id: tenantId, lead_id: leadId, texto: `${userName} encerrou esta conversa` },
+      }),
+    ]);
     return updated;
   }
 

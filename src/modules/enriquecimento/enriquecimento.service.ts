@@ -2,6 +2,8 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../../prisma/prisma.service';
 import { montarPayloadPixEstatico } from '../../common/utils/pix.util';
 
+const QUANTIDADE_MINIMA_COMPRA = 2000;
+
 @Injectable()
 export class EnriquecimentoService {
   constructor(private prisma: PrismaService) {}
@@ -100,7 +102,9 @@ export class EnriquecimentoService {
   }
 
   async comprarCreditos(tenantId: string, quantidade: number) {
-    if (!quantidade || quantidade <= 0) throw new BadRequestException('Quantidade inválida.');
+    if (!quantidade || quantidade < QUANTIDADE_MINIMA_COMPRA) {
+      throw new BadRequestException(`Quantidade mínima é ${QUANTIDADE_MINIMA_COMPRA} créditos.`);
+    }
     const tenant = await this.prisma.tenant.findUniqueOrThrow({ where: { id: tenantId } });
 
     // Preço nunca vem do cliente — sempre recalculado aqui.
