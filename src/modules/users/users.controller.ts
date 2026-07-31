@@ -32,6 +32,23 @@ export class UsersController {
     return this.usersService.findAll(tenantId);
   }
 
+  @Get('config')
+  @Roles(UserRole.admin_master, UserRole.lojista_admin)
+  @ApiOperation({ summary: 'Lê configurações de equipe do tenant (ex: vendedor ver todos os atendimentos)' })
+  getConfig(@CurrentUser('tenant_id') tenantId: string) {
+    return this.usersService.getConfig(tenantId);
+  }
+
+  @Patch('config')
+  @Roles(UserRole.admin_master, UserRole.lojista_admin)
+  @ApiOperation({ summary: 'Atualiza configurações de equipe do tenant' })
+  updateConfig(
+    @CurrentUser('tenant_id') tenantId: string,
+    @Body() dto: { vendedor_ve_todos_atendimentos?: boolean },
+  ) {
+    return this.usersService.updateConfig(tenantId, dto);
+  }
+
   @Patch(':id/toggle')
   @Roles(UserRole.admin_master, UserRole.lojista_admin)
   @ApiOperation({ summary: 'Ativa/desativa usuário' })

@@ -120,6 +120,11 @@ model Tenant {
   proxima_cobranca_em     DateTime?
   assinatura_bloqueada    Boolean  @default(false)
 
+  // Quando true, vendedor (atendente) vê a esteira do Chat inteira —
+  // inclusive atendimentos já atribuídos a outros vendedores. Quando
+  // false (padrão), só vê os seus + os ainda sem vendedor atribuído.
+  vendedor_ve_todos_atendimentos Boolean @default(false)
+
   users               User[]
   chatwoot_config     ChatwootConfig?
   leads               Lead[]

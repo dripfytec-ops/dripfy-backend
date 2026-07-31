@@ -260,6 +260,28 @@ export class DmCampanhasService implements OnModuleInit {
     return this.prisma.dmCampanha.update({ where: { id }, data: dto });
   }
 
+  // Exclui a campanha/demanda, sua base de contatos (DmContato tem
+  // onDelete: Cascade) e também os Leads que essa campanha gerou no Chat —
+  // junto vão as mensagens e atividades deles (Message/LeadActivity têm
+  // onDelete: Cascade a partir do Lead).
+  async remove(tenantId: string, id: string) {
+    const campanha = await this.prisma.dmCampanha.findFirst({ where: { id, tenant_id: tenantId } });
+    if (!campanha) throw new NotFoundException('Campanha não encontrada.');
+    if (campanha.status === 'em_andamento') {
+      throw new BadRequestException('Pause a campanha antes de excluí-la.');
+    }
+    if (campanha.financeiro_status === 'pago') {
+      throw new BadRequestException('Não é possível excluir uma demanda com pagamento já confirmado.');
+    }
+
+    this.loopsAtivos.delete(id);
+    await this.prisma.$transaction([
+      this.prisma.lead.deleteMany({ where: { tenant_id: tenantId, origem_campanha_id: id } }),
+      this.prisma.dmCampanha.delete({ where: { id } }),
+    ]);
+    return { deleted: true };
+  }
+
   async iniciarDisparo(tenantId: string, campanhaId: string) {
     const campanha = await this.prisma.dmCampanha.findFirst({ where: { id: campanhaId, tenant_id: tenantId } });
     if (!campanha) throw new NotFoundException('Campanha não encontrada.');

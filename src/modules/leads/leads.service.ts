@@ -98,15 +98,29 @@ export class LeadsService {
 
     // Vendedor vê os leads já atribuídos a ele + os que ainda não têm
     // vendedor (balcão compartilhado) — só não vê os atribuídos a outro
-    // vendedor.
+    // vendedor, a menos que o tenant tenha ligado a chave
+    // vendedor_ve_todos_atendimentos (aí vê a esteira toda, igual ao admin).
     if (userRole === 'atendente' && userId) {
-      and.push({ OR: [{ vendedor_id: userId }, { vendedor_id: null }] });
+      const tenant = await this.prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { vendedor_ve_todos_atendimentos: true },
+      });
+      if (!tenant?.vendedor_ve_todos_atendimentos) {
+        and.push({ OR: [{ vendedor_id: userId }, { vendedor_id: null }] });
+      }
     }
 
     // Conversas encerradas saem da esteira geral (Minhas/Todas) e só
     // aparecem na aba "Encerradas".
     const mostrarEncerradas = String(filters.encerradas) === 'true';
     where.status_atual = mostrarEncerradas ? 'finalizado' : { not: 'finalizado' };
+
+    // A base de contatos que o lojista sobe numa campanha vira Lead na hora
+    // (pro Chat já reconhecer o número quando a mensagem chegar), mas não
+    // deve poluir a esteira geral antes de pelo menos uma mensagem ter sido
+    // enviada de verdade pra esse contato — nem toda campanha dispara pra
+    // 100% da base de uma vez.
+    where.disparado = true;
 
     if (filters.etiqueta_id) where.etiquetas = { some: { id: filters.etiqueta_id } };
     if (filters.origem_campanha_id) where.origem_campanha_id = filters.origem_campanha_id;

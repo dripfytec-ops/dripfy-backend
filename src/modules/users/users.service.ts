@@ -123,4 +123,21 @@ export class UsersService {
     await this.prisma.user.delete({ where: { id: userId } });
     return { deleted: true };
   }
+
+  async getConfig(tenantId: string) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { vendedor_ve_todos_atendimentos: true },
+    });
+    if (!tenant) throw new NotFoundException('Tenant não encontrado.');
+    return tenant;
+  }
+
+  async updateConfig(tenantId: string, dto: { vendedor_ve_todos_atendimentos?: boolean }) {
+    return this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: { ...(dto.vendedor_ve_todos_atendimentos !== undefined && { vendedor_ve_todos_atendimentos: dto.vendedor_ve_todos_atendimentos }) },
+      select: { vendedor_ve_todos_atendimentos: true },
+    });
+  }
 }

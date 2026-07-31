@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Post, Patch, Param, Body, Query, UseGuards, UseInterceptors, UploadedFile, BadRequestException,
+  Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards, UseInterceptors, UploadedFile, BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
@@ -77,6 +77,12 @@ export class DisparoMassaController {
   @ApiOperation({ summary: 'Atualiza status da campanha (ex: pausar)' })
   patchCampanha(@CurrentUser('tenant_id') tenantId: string, @Param('id') id: string, @Body() dto: PatchDmCampanhaDto) {
     return this.campanhasService.patch(tenantId, id, dto);
+  }
+
+  @Delete('campanhas/:id')
+  @ApiOperation({ summary: 'Exclui uma campanha/demanda e a base de contatos enviada' })
+  removeCampanha(@CurrentUser('tenant_id') tenantId: string, @Param('id') id: string) {
+    return this.campanhasService.remove(tenantId, id);
   }
 
   @Post('processar')
