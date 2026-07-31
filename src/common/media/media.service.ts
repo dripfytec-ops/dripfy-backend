@@ -82,6 +82,13 @@ export class MediaService {
         ffmpeg(tmpIn)
           .audioCodec('libopus')
           .audioChannels(1)
+          // Opus só existe internamente a 48kHz — sem forçar isso aqui, a
+          // frequência de captura do navegador (varia por SO/dispositivo)
+          // pode ir pro encoder errada e o áudio sair mudo/distorcido na
+          // Meta, mesmo com o arquivo tecnicamente válido.
+          .audioFrequency(48000)
+          .audioBitrate('64k')
+          .outputOptions(['-vn', '-application', 'voip'])
           .format('ogg')
           .on('error', reject)
           .on('end', () => resolve())
