@@ -10,7 +10,7 @@ export class MetaService {
   async obterInfoNumero({ phoneNumberId, accessToken }: { phoneNumberId: string; accessToken: string }) {
     try {
       const { data } = await axios.get(`${BASE_URL}/${phoneNumberId}`, {
-        params: { fields: 'quality_rating,throughput,name_status,display_phone_number' },
+        params: { fields: 'quality_rating,throughput,name_status,display_phone_number,status' },
         headers: { Authorization: `Bearer ${accessToken}` },
       });
       return data;

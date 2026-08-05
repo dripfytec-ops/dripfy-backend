@@ -475,6 +475,7 @@ model DmCanal {
   id                String   @id @default(uuid())
   tenant_id         String
   nome              String
+  telefone          String?
   waba_id           String
   phone_number_id   String
   access_token      String

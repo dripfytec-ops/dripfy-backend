@@ -3,6 +3,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateDmCanalDto {
   @ApiProperty() @IsString() nome: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() telefone?: string;
   @ApiProperty() @IsString() waba_id: string;
   @ApiProperty() @IsString() phone_number_id: string;
   @ApiProperty() @IsString() access_token: string;
@@ -15,6 +16,7 @@ export class CreateDmCanalDto {
 
 export class UpdateDmCanalDto {
   @ApiPropertyOptional() @IsOptional() @IsString() nome?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() telefone?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() waba_id?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() phone_number_id?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() access_token?: string;
