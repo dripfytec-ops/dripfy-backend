@@ -57,7 +57,7 @@ export class DmCampanhasService implements OnModuleInit {
 
     if (dto.vendedor_id) {
       const vendedor = await this.prisma.user.findFirst({
-        where: { id: dto.vendedor_id, tenant_id: tenantId, role: 'atendente' },
+        where: { id: dto.vendedor_id, tenant_id: tenantId },
       });
       if (!vendedor) throw new BadRequestException('Vendedor não encontrado.');
     }
@@ -280,6 +280,40 @@ export class DmCampanhasService implements OnModuleInit {
       this.prisma.dmCampanha.delete({ where: { id } }),
     ]);
     return { deleted: true };
+  }
+
+  // Exporta os contatos com falha de uma campanha em CSV (separado por
+  // vírgula, mesmo cabeçalho aceito no upload de nova campanha) — dá pra
+  // reimportar direto numa campanha nova pra tentar o disparo de novo.
+  async exportarFalhasCsv(tenantId: string, id: string) {
+    const campanha = await this.prisma.dmCampanha.findFirst({ where: { id, tenant_id: tenantId } });
+    if (!campanha) throw new NotFoundException('Campanha não encontrada.');
+
+    const contatos = await this.prisma.dmContato.findMany({
+      where: { campanha_id: id, status: 'falha' },
+      orderBy: { criado_em: 'asc' },
+    });
+
+    const csvField = (valor: string) => {
+      const v = valor ?? '';
+      return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+    };
+
+    const linhas = [
+      ['nome', 'telefone', 'cpf', 'erro'].join(','),
+      ...contatos.map((c) => [
+        csvField(c.nome || ''),
+        csvField(c.telefone),
+        csvField(c.cpf || ''),
+        csvField(c.erro || ''),
+      ].join(',')),
+    ];
+
+    return {
+      filename: `falhas_${campanha.nome.replace(/\s+/g, '_')}.csv`,
+      csv: linhas.join('\n'),
+      total: contatos.length,
+    };
   }
 
   async iniciarDisparo(tenantId: string, campanhaId: string) {

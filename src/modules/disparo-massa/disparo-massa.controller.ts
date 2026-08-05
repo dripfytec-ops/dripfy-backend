@@ -1,8 +1,9 @@
 import {
-  Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards, UseInterceptors, UploadedFile, BadRequestException,
+  Controller, Get, Post, Patch, Delete, Param, Body, Query, Res, UseGuards, UseInterceptors, UploadedFile, BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
+import { Response } from 'express';
 import { DmCanaisService } from './dm-canais.service';
 import { DmCampanhasService } from './dm-campanhas.service';
 import { CreateDmCanalDto, UpdateDmCanalDto } from './dto/dm-canal.dto';
@@ -83,6 +84,19 @@ export class DisparoMassaController {
   @ApiOperation({ summary: 'Exclui uma campanha/demanda e a base de contatos enviada' })
   removeCampanha(@CurrentUser('tenant_id') tenantId: string, @Param('id') id: string) {
     return this.campanhasService.remove(tenantId, id);
+  }
+
+  @Get('campanhas/:id/exportar-falhas')
+  @ApiOperation({ summary: 'Exporta em CSV os contatos que falharam no disparo, prontos pra reimportar numa campanha nova' })
+  async exportarFalhas(
+    @CurrentUser('tenant_id') tenantId: string,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    const { filename, csv } = await this.campanhasService.exportarFalhasCsv(tenantId, id);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(String.fromCharCode(0xFEFF) + csv);
   }
 
   @Post('processar')
