@@ -177,7 +177,7 @@ export class DmCampanhasService implements OnModuleInit {
   private async persistirLeadsEmLote(
     tenantId: string,
     contatosCsv: { nome?: string; cpf?: string; telefone: string }[],
-    campanha: { id: string; nome: string; vendedor_id?: string | null },
+    campanha: { id: string; nome: string; vendedor_id?: string | null; canal_id: string | null },
   ) {
     const contatosNormalizados = contatosCsv.map((c) => ({
       nome: c.nome || null,
@@ -189,7 +189,7 @@ export class DmCampanhasService implements OnModuleInit {
       const lote = contatosNormalizados.slice(i, i + LOTE_UPSERT);
       await Promise.allSettled(
         lote.map((c) =>
-          this.garantirLead(tenantId, c, { id: campanha.id, nome: campanha.nome, vendedor_id: campanha.vendedor_id ?? null })
+          this.garantirLead(tenantId, c, { id: campanha.id, nome: campanha.nome, vendedor_id: campanha.vendedor_id ?? null, canal_id: campanha.canal_id })
             .catch((e) => this.logger.error(`Falha ao persistir lead do contato ${c.telefone}: ${e.message}`)),
         ),
       );
@@ -202,10 +202,10 @@ export class DmCampanhasService implements OnModuleInit {
   private async garantirLead(
     tenantId: string,
     contato: { nome: string | null; cpf: string | null; telefone: string },
-    campanha: { id: string; nome: string; vendedor_id: string | null },
+    campanha: { id: string; nome: string; vendedor_id: string | null; canal_id: string | null },
   ) {
     const lead = await this.prisma.lead.findFirst({
-      where: { tenant_id: tenantId, telefone: { in: telefoneVariantes(contato.telefone) } },
+      where: { tenant_id: tenantId, telefone: { in: telefoneVariantes(contato.telefone) }, canal_id: campanha.canal_id },
     });
 
     if (!lead) {
@@ -215,19 +215,21 @@ export class DmCampanhasService implements OnModuleInit {
           nome: contato.nome || `Contato ${contato.telefone}`,
           telefone: contato.telefone,
           cpf: contato.cpf || null,
+          canal_id: campanha.canal_id,
           origem_campanha_id: campanha.id,
           origem_campanha_nome: campanha.nome,
           vendedor_id: campanha.vendedor_id,
         },
       }).catch(async (e) => {
-        // Corrida/duplicidade: CPF já usado por outro lead do tenant. Segue
-        // sem CPF em vez de derrubar a importação do contato.
+        // Corrida/duplicidade: CPF já usado por outro lead do tenant nesse
+        // mesmo canal. Segue sem CPF em vez de derrubar a importação do contato.
         if (contato.cpf) {
           return this.prisma.lead.create({
             data: {
               tenant_id: tenantId,
               nome: contato.nome || `Contato ${contato.telefone}`,
               telefone: contato.telefone,
+              canal_id: campanha.canal_id,
               origem_campanha_id: campanha.id,
               origem_campanha_nome: campanha.nome,
               vendedor_id: campanha.vendedor_id,
@@ -450,14 +452,14 @@ export class DmCampanhasService implements OnModuleInit {
   private async sincronizarLead(
     tenantId: string,
     contato: DmContato,
-    campanha: { id: string; nome: string; template_name: string; vendedor_id: string | null },
+    campanha: { id: string; nome: string; template_name: string; vendedor_id: string | null; canal_id: string | null },
     wamid: string | null,
   ) {
     const preview = `Template: ${campanha.template_name}`;
     await this.garantirLead(tenantId, { nome: contato.nome, cpf: contato.cpf, telefone: contato.telefone }, campanha);
 
     const lead = await this.prisma.lead.findFirst({
-      where: { tenant_id: tenantId, telefone: { in: telefoneVariantes(contato.telefone) } },
+      where: { tenant_id: tenantId, telefone: { in: telefoneVariantes(contato.telefone) }, canal_id: campanha.canal_id },
     });
     if (!lead) {
       this.logger.error(`Lead não encontrado após garantirLead para o contato ${contato.telefone} — pulando registro da mensagem.`);
@@ -477,6 +479,7 @@ export class DmCampanhasService implements OnModuleInit {
     await this.prisma.message.create({
       data: {
         tenant_id: tenantId,
+        canal_id: campanha.canal_id,
         lead_id: lead.id_number,
         wamid: wamid || undefined,
         template_name: campanha.template_name,

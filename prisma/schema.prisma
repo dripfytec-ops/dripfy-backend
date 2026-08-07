@@ -428,7 +428,7 @@ model Lead {
   messages      Message[]
   activities    LeadActivity[]
 
-  @@unique([tenant_id, cpf])
+  @@unique([tenant_id, cpf, canal_id])
   @@index([tenant_id, status_atual])
   @@index([tenant_id, etiqueta_id])
   @@index([tenant_id, disparado])

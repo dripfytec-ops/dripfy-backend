@@ -33,19 +33,27 @@ export class WebhookService {
 
     const telefoneNorm = data.telefone.replace(/\D/g, '');
 
-    const lead = await this.prisma.lead.upsert({
-      where: { tenant_id_cpf: { tenant_id: tenant.id, cpf: data.cpf || telefoneNorm } },
-      update: {},
-      create: {
-        tenant_id: tenant.id,
-        nome: data.nome,
-        telefone: telefoneNorm,
-        cpf: data.cpf || telefoneNorm,
-        status_atual: LeadStatus.balde_geral,
-      },
-    });
-
+    // Resolve o canal ANTES de buscar/criar o lead — a conversa agora é
+    // identificada por (cpf, canal), não só por cpf. Usa findFirst + create
+    // em vez de upsert porque o Prisma não aceita `null` no valor de um
+    // campo opcional dentro da chave composta de um `where` único.
     const canal = await this.canaisService.findFirstActive(tenant.id);
+
+    let lead = await this.prisma.lead.findFirst({
+      where: { tenant_id: tenant.id, cpf: data.cpf || telefoneNorm, canal_id: canal?.id ?? null },
+    });
+    if (!lead) {
+      lead = await this.prisma.lead.create({
+        data: {
+          tenant_id: tenant.id,
+          nome: data.nome,
+          telefone: telefoneNorm,
+          cpf: data.cpf || telefoneNorm,
+          canal_id: canal?.id ?? null,
+          status_atual: LeadStatus.balde_geral,
+        },
+      });
+    }
 
     if (canal?.saudacao_ativa && canal?.mensagem_boas_vindas) {
       const { wamid } = await this.enviarSaudacao(canal, telefoneNorm, data.nome);
@@ -193,11 +201,13 @@ export class WebhookService {
 
       this.logger.log(`Mensagem recebida de ${telefone} → "${texto}"`);
 
-      // Busca o lead mais antigo com esse telefone (evita duplicatas). Usa as
-      // variantes com/sem o 9º dígito porque a Meta nem sempre manda o wa_id
-      // no mesmo formato que foi salvo no disparo original.
+      // Busca o lead mais antigo com esse telefone NESSE canal (evita
+      // duplicatas). Usa as variantes com/sem o 9º dígito porque a Meta nem
+      // sempre manda o wa_id no mesmo formato que foi salvo no disparo
+      // original. Uma conversa é (telefone + canal): o mesmo cliente falando
+      // com um canal diferente vira um lead novo, não mistura com o outro.
       let lead = await this.prisma.lead.findFirst({
-        where: { tenant_id: tenant.id, telefone: { in: telefoneVariantes(telefone) } },
+        where: { tenant_id: tenant.id, telefone: { in: telefoneVariantes(telefone) }, canal_id: canal?.id ?? null },
         orderBy: { criado_em: 'asc' },
       });
 
@@ -236,11 +246,6 @@ export class WebhookService {
             last_message_at: new Date(),
             last_message_preview: texto.slice(0, 120),
             unread_count: { increment: 1 },
-            // Sempre acompanha o canal por onde a mensagem mais recente
-            // chegou — é por ele que a resposta precisa sair. Sem isso, um
-            // lead que respondesse por um canal diferente do que abriu a
-            // conversa continuava recebendo réplicas pelo canal errado.
-            ...(canal?.id ? { canal_id: canal.id } : {}),
             ...(primeiraRespostaAoDisparo ? { status_atual: LeadStatus.em_atendimento } : {}),
           },
         });

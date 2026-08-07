@@ -337,7 +337,7 @@ export class LeadsService {
     const telefone = this.normalizeTelefone(dto.telefone);
 
     let lead = await this.prisma.lead.findFirst({
-      where: { tenant_id: tenantId, telefone: { in: telefoneVariantes(telefone) } },
+      where: { tenant_id: tenantId, telefone: { in: telefoneVariantes(telefone) }, canal_id: canal.id },
     });
     if (!lead) {
       const etiquetaPadrao = await this.prisma.etiqueta.findFirst({
@@ -353,8 +353,6 @@ export class LeadsService {
           etiquetas: etiquetaPadrao ? { connect: [{ id: etiquetaPadrao.id }] } : undefined,
         },
       });
-    } else if (!lead.canal_id) {
-      lead = await this.prisma.lead.update({ where: { id_number: lead.id_number }, data: { canal_id: canal.id } });
     }
 
     let resultado: any;
