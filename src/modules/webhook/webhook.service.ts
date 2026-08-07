@@ -224,8 +224,6 @@ export class WebhookService {
         });
       } else {
         // Lead existente → adiciona a etiqueta "Responderam" (se ainda não tiver) e atualiza última mensagem/não lidas.
-        // Leads criados antes do campo canal_id existir ficam sem dono — usa
-        // esse recebimento pra preencher (só quando ainda estava nulo).
         if (etAtendimento) {
           await this.prisma.lead.update({
             where: { id_number: lead.id_number },
@@ -238,7 +236,11 @@ export class WebhookService {
             last_message_at: new Date(),
             last_message_preview: texto.slice(0, 120),
             unread_count: { increment: 1 },
-            ...(lead.canal_id ? {} : { canal_id: canal?.id ?? null }),
+            // Sempre acompanha o canal por onde a mensagem mais recente
+            // chegou — é por ele que a resposta precisa sair. Sem isso, um
+            // lead que respondesse por um canal diferente do que abriu a
+            // conversa continuava recebendo réplicas pelo canal errado.
+            ...(canal?.id ? { canal_id: canal.id } : {}),
             ...(primeiraRespostaAoDisparo ? { status_atual: LeadStatus.em_atendimento } : {}),
           },
         });

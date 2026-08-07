@@ -17,6 +17,7 @@ const ETIQUETA_SELECT = { id: true, nome: true, cor_hexadecimal: true, slug: tru
 const LEAD_INCLUDE = {
   etiquetas: { select: ETIQUETA_SELECT, orderBy: { ordem: 'asc' as const } },
   vendedor: { select: { id: true, nome: true } },
+  canal: { select: { id: true, nome: true } },
 };
 
 @Injectable()

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
 import axios from 'axios';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MetaService } from './meta.service';
@@ -18,10 +18,26 @@ function tokenPreview(accessToken: string): string {
 
 @Injectable()
 export class DmCanaisService {
+  private readonly logger = new Logger(DmCanaisService.name);
+
   constructor(private prisma: PrismaService, private meta: MetaService) {}
 
   async create(tenantId: string, dto: CreateDmCanalDto) {
-    return this.prisma.dmCanal.create({ data: { tenant_id: tenantId, ...dto }, select: CANAL_SELECT });
+    const canal = await this.prisma.dmCanal.create({ data: { tenant_id: tenantId, ...dto }, select: CANAL_SELECT });
+    await this.assinarWebhookSeguro(dto.waba_id, dto.access_token);
+    return canal;
+  }
+
+  // Chama a Meta pra assinar o webhook da WABA sem derrubar o
+  // create/update do canal se a chamada falhar (token sem permissão,
+  // instabilidade momentânea etc.) — o canal continua utilizável pra
+  // disparo mesmo que essa assinatura precise ser refeita manualmente.
+  private async assinarWebhookSeguro(wabaId: string, accessToken: string) {
+    try {
+      await this.meta.assinarWebhookWaba({ wabaId, accessToken });
+    } catch (e: any) {
+      this.logger.error(`Falha ao assinar webhook da WABA ${wabaId}: ${e.message}`);
+    }
   }
 
   async findAll(tenantId: string) {
@@ -34,13 +50,19 @@ export class DmCanaisService {
   }
 
   async update(tenantId: string, id: string, dto: UpdateDmCanalDto) {
-    await this.ensureOwner(tenantId, id);
+    const atual = await this.ensureOwner(tenantId, id);
     const { access_token, ...rest } = dto;
-    return this.prisma.dmCanal.update({
+    const canal = await this.prisma.dmCanal.update({
       where: { id },
       data: { ...rest, ...(access_token ? { access_token } : {}) },
       select: CANAL_SELECT,
     });
+    // Reassina o webhook se a WABA ou o token mudaram — uma WABA nova
+    // (ou um token reemitido) precisa ser assinada de novo.
+    if (dto.waba_id || access_token) {
+      await this.assinarWebhookSeguro(dto.waba_id || atual.waba_id, access_token || atual.access_token);
+    }
+    return canal;
   }
 
   async findCredenciais(tenantId: string, id: string) {

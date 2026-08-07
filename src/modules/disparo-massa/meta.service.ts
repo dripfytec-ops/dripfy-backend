@@ -45,6 +45,19 @@ export class MetaService {
     }
   }
 
+  // Assina o app no webhook da WABA — sem isso a Meta nunca manda os eventos
+  // de mensagem recebida pra esse número (cada WABA precisa ser assinada
+  // individualmente, não é automático só por ter o número cadastrado aqui).
+  async assinarWebhookWaba({ wabaId, accessToken }: { wabaId: string; accessToken: string }) {
+    try {
+      await axios.post(`${BASE_URL}/${wabaId}/subscribed_apps`, null, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+    } catch (e: any) {
+      throw new BadRequestException(e.response?.data?.error?.message || 'Erro ao assinar webhook da WABA');
+    }
+  }
+
   async listarTemplates({ wabaId, accessToken }: { wabaId: string; accessToken: string }) {
     try {
       const { data } = await axios.get(`${BASE_URL}/${wabaId}/message_templates`, {
