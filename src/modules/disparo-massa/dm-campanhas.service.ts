@@ -4,7 +4,7 @@ import { MetaService } from './meta.service';
 import { FinanceiroService } from '../financeiro/financeiro.service';
 import { CreateDmCampanhaDto, PatchDmCampanhaDto, CreateDripifyCampanhaDto } from './dto/dm-campanha.dto';
 import { telefoneVariantes } from '../../common/utils/telefone.util';
-import { DmContato, DmCanal, MessageDirection, MessageStatus } from '@prisma/client';
+import { DmContato, DmCanal, MessageDirection, MessageStatus, LeadStatus } from '@prisma/client';
 
 const TAMANHO_LOTE_PADRAO = 10;
 const DELAY_MS_PADRAO = 300;
@@ -466,7 +466,12 @@ export class DmCampanhasService implements OnModuleInit {
 
     await this.prisma.lead.update({
       where: { id_number: lead.id_number },
-      data: { disparado: true, last_message_at: new Date(), last_message_preview: preview },
+      data: {
+        disparado: true,
+        status_atual: LeadStatus.aguardando_resposta,
+        last_message_at: new Date(),
+        last_message_preview: preview,
+      },
     }).catch(() => {});
 
     await this.prisma.message.create({

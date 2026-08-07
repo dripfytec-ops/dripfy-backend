@@ -411,6 +411,11 @@ model Lead {
   unread_count          Int       @default(0)
   origem_campanha_id    String?
   origem_campanha_nome  String?
+  // Canal WhatsApp dono dessa conversa — necessário desde que um tenant
+  // pode ter mais de um canal (número) ativo; sem isso, respostas eram
+  // enviadas por "qualquer canal ativo" do tenant, não necessariamente o
+  // certo. Nulo em leads antigos, criados antes desse campo existir.
+  canal_id      String?
   criado_em     DateTime   @default(now())
   atualizado_em DateTime   @updatedAt
 
@@ -419,6 +424,7 @@ model Lead {
   etiquetas     Etiqueta[]    @relation("LeadEtiquetas")
   vendedor      User?         @relation("LeadVendedor", fields: [vendedor_id], references: [id], onDelete: SetNull)
   origem_campanha DmCampanha? @relation(fields: [origem_campanha_id], references: [id], onDelete: SetNull)
+  canal         DmCanal?      @relation(fields: [canal_id], references: [id], onDelete: SetNull)
   messages      Message[]
   activities    LeadActivity[]
 
@@ -482,13 +488,15 @@ model DmCanal {
   bm_nome           String?
   lote_size         Int?
   delay_ms          Int?
-  template_boas_vindas String?
+  mensagem_boas_vindas String?
+  saudacao_ativa    Boolean  @default(false)
   chatwoot_inbox_id Int?
   ativo             Boolean  @default(true)
   criado_em         DateTime @default(now())
 
   tenant     Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   campanhas  DmCampanha[]
+  leads      Lead[]
 
   @@index([tenant_id])
   @@index([tenant_id, phone_number_id])

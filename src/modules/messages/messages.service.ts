@@ -11,11 +11,18 @@ const META_API = 'https://graph.facebook.com/v20.0';
 export class MessagesService {
   constructor(private prisma: PrismaService, private mediaService: MediaService, private metaService: MetaService) {}
 
+  // Um tenant pode ter mais de um canal (número) ativo — resolve sempre
+  // pelo canal_id gravado no lead (o dono real da conversa), nunca "o
+  // primeiro canal ativo do tenant" (isso mandava respostas pelo número
+  // errado quando havia mais de um canal). Só cai no fallback do primeiro
+  // canal ativo pra leads antigos, criados antes desse campo existir.
   private async findLeadECanal(tenantId: string, leadId: number) {
     const lead = await this.prisma.lead.findFirst({ where: { id_number: leadId, tenant_id: tenantId } });
     if (!lead) throw new NotFoundException('Lead não encontrado.');
 
-    const canal = await this.prisma.dmCanal.findFirst({ where: { tenant_id: tenantId, ativo: true } });
+    const canal = lead.canal_id
+      ? await this.prisma.dmCanal.findFirst({ where: { id: lead.canal_id, tenant_id: tenantId, ativo: true } })
+      : await this.prisma.dmCanal.findFirst({ where: { tenant_id: tenantId, ativo: true }, orderBy: { criado_em: 'asc' } });
     if (!canal) throw new NotFoundException('Nenhum canal WhatsApp ativo encontrado.');
 
     return { lead, canal };

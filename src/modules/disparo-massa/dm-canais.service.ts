@@ -6,7 +6,7 @@ import { CreateDmCanalDto, UpdateDmCanalDto } from './dto/dm-canal.dto';
 
 const CANAL_SELECT = {
   id: true, nome: true, telefone: true, waba_id: true, phone_number_id: true, bm_nome: true,
-  lote_size: true, delay_ms: true, template_boas_vindas: true, chatwoot_inbox_id: true,
+  lote_size: true, delay_ms: true, mensagem_boas_vindas: true, saudacao_ativa: true, chatwoot_inbox_id: true,
   ativo: true, criado_em: true,
 };
 

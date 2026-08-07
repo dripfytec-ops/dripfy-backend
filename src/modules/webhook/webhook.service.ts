@@ -47,31 +47,15 @@ export class WebhookService {
 
     const canal = await this.canaisService.findFirstActive(tenant.id);
 
-    if (canal?.template_boas_vindas) {
-      try {
-        await axios.post(
-          `https://graph.facebook.com/v20.0/${canal.phone_number_id}/messages`,
-          {
-            messaging_product: 'whatsapp',
-            to: telefoneNorm,
-            type: 'template',
-            template: {
-              name: canal.template_boas_vindas,
-              language: { code: 'pt_BR' },
-              components: [{ type: 'body', parameters: [{ type: 'text', text: data.nome }] }],
-            },
-          },
-          { headers: { Authorization: `Bearer ${canal.access_token}` } },
-        );
-
+    if (canal?.saudacao_ativa && canal?.mensagem_boas_vindas) {
+      const { wamid } = await this.enviarSaudacao(canal, telefoneNorm, data.nome);
+      if (wamid !== null) {
         await this.prisma.lead.update({
           where: { id_number: lead.id_number },
           data: { disparado: true, status_atual: LeadStatus.aguardando_resposta },
         });
 
         this.logger.log(`Disparo imediato OK → ${data.nome} (${telefoneNorm})`);
-      } catch (e) {
-        this.logger.error(`Falha no disparo imediato: ${e.message}`);
       }
     }
 
@@ -86,6 +70,35 @@ export class WebhookService {
     }
 
     return { lead_id: lead.id_number, status: 'processado' };
+  }
+
+  // Dispara a mensagem de boas-vindas em texto livre (configurada pelo
+  // usuário) via Graph API. Válido dentro da janela de 24h aberta pelo
+  // lead — não precisa ser um template aprovado pela Meta, já que é sempre
+  // uma resposta a uma mensagem que o lead acabou de mandar.
+  // Retorna o wamid da mensagem enviada, ou null em caso de falha.
+  private async enviarSaudacao(
+    canal: { phone_number_id: string; access_token: string; mensagem_boas_vindas: string | null },
+    telefone: string,
+    nome: string,
+  ): Promise<{ wamid: string | null; texto: string }> {
+    const texto = (canal.mensagem_boas_vindas || '').replace(/\{\{\s*nome\s*\}\}/gi, nome);
+    try {
+      const { data } = await axios.post(
+        `https://graph.facebook.com/v20.0/${canal.phone_number_id}/messages`,
+        {
+          messaging_product: 'whatsapp',
+          to: telefone,
+          type: 'text',
+          text: { body: texto },
+        },
+        { headers: { Authorization: `Bearer ${canal.access_token}` } },
+      );
+      return { wamid: data?.messages?.[0]?.id || null, texto };
+    } catch (e) {
+      this.logger.error(`Falha ao enviar saudação: ${e.message}`);
+      return { wamid: null, texto };
+    }
   }
 
   async processMetaGlobal(body: any) {
@@ -188,6 +201,11 @@ export class WebhookService {
         orderBy: { criado_em: 'asc' },
       });
 
+      // Primeira resposta do lead depois de um disparo (campanha ou saudação
+      // imediata) — é o gatilho pra mandar a mensagem de boas-vindas.
+      // Precisa ser lido ANTES do update abaixo, que muda o status.
+      const primeiraRespostaAoDisparo = lead?.status_atual === LeadStatus.aguardando_resposta;
+
       if (!lead) {
         // Número desconhecido → cria lead automaticamente marcado como iniciado pelo cliente
         this.logger.log(`Número desconhecido ${telefone} — criando lead automaticamente`);
@@ -197,6 +215,7 @@ export class WebhookService {
             nome: `Contato ${telefone}`,
             telefone,
             iniciado_pelo_cliente: true,
+            canal_id: canal?.id ?? null,
             etiquetas: etAtendimento ? { connect: [{ id: etAtendimento.id }] } : undefined,
             last_message_at: new Date(),
             last_message_preview: texto.slice(0, 120),
@@ -204,7 +223,9 @@ export class WebhookService {
           },
         });
       } else {
-        // Lead existente → adiciona a etiqueta "Responderam" (se ainda não tiver) e atualiza última mensagem/não lidas
+        // Lead existente → adiciona a etiqueta "Responderam" (se ainda não tiver) e atualiza última mensagem/não lidas.
+        // Leads criados antes do campo canal_id existir ficam sem dono — usa
+        // esse recebimento pra preencher (só quando ainda estava nulo).
         if (etAtendimento) {
           await this.prisma.lead.update({
             where: { id_number: lead.id_number },
@@ -217,6 +238,8 @@ export class WebhookService {
             last_message_at: new Date(),
             last_message_preview: texto.slice(0, 120),
             unread_count: { increment: 1 },
+            ...(lead.canal_id ? {} : { canal_id: canal?.id ?? null }),
+            ...(primeiraRespostaAoDisparo ? { status_atual: LeadStatus.em_atendimento } : {}),
           },
         });
       }
@@ -237,6 +260,23 @@ export class WebhookService {
           status: MessageStatus.entregue,
         },
       });
+
+      if (primeiraRespostaAoDisparo && canal?.saudacao_ativa && canal?.mensagem_boas_vindas) {
+        const { wamid: wamidSaudacao, texto: textoSaudacao } = await this.enviarSaudacao(canal, telefone, lead.nome);
+        if (wamidSaudacao !== null) {
+          await this.prisma.message.create({
+            data: {
+              tenant_id: tenant.id,
+              canal_id: canal.id,
+              lead_id: lead.id_number,
+              wamid: wamidSaudacao,
+              content: textoSaudacao,
+              direction: MessageDirection.saida,
+              status: MessageStatus.enviado,
+            },
+          }).catch((e) => this.logger.error(`Falha ao registrar mensagem de saudação do lead ${lead.id_number}: ${e.message}`));
+        }
+      }
 
       const contactId = await this.chatwootService.createOrUpdateContact(
         tenant.id,

@@ -348,9 +348,12 @@ export class LeadsService {
           nome: dto.nome,
           telefone,
           cpf: dto.cpf || null,
+          canal_id: canal.id,
           etiquetas: etiquetaPadrao ? { connect: [{ id: etiquetaPadrao.id }] } : undefined,
         },
       });
+    } else if (!lead.canal_id) {
+      lead = await this.prisma.lead.update({ where: { id_number: lead.id_number }, data: { canal_id: canal.id } });
     }
 
     let resultado: any;

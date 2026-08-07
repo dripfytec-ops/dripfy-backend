@@ -10,7 +10,8 @@ export class CreateDmCanalDto {
   @ApiPropertyOptional() @IsOptional() @IsString() bm_nome?: string;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(1) lote_size?: number;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(0) delay_ms?: number;
-  @ApiPropertyOptional() @IsOptional() @IsString() template_boas_vindas?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() mensagem_boas_vindas?: string;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() saudacao_ativa?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsInt() chatwoot_inbox_id?: number;
 }
 
@@ -23,7 +24,8 @@ export class UpdateDmCanalDto {
   @ApiPropertyOptional() @IsOptional() @IsString() bm_nome?: string;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(1) lote_size?: number;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(0) delay_ms?: number;
-  @ApiPropertyOptional() @IsOptional() @IsString() template_boas_vindas?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() mensagem_boas_vindas?: string;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() saudacao_ativa?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsInt() chatwoot_inbox_id?: number;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() ativo?: boolean;
 }
