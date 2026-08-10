@@ -93,6 +93,14 @@ enum DmContatoStatus {
   falha
 }
 
+// Como uma demanda de Disparo Dripfy (tipo='dripfy') é efetivamente enviada:
+// jmd = exportação de CSV + execução manual pela equipe (padrão histórico);
+// odysseia_whatsapp = disparo automático via API da Odysseia (WhatsApp agendado).
+enum DmExecucaoDripfy {
+  jmd
+  odysseia_whatsapp
+}
+
 model Tenant {
   id                  String             @id @default(uuid())
   nome_empresa        String
@@ -532,6 +540,13 @@ model DmCampanha {
   midia_url         String?
   aprovado_em       DateTime?
   aprovado_por      String?
+
+  // ─── Execução via Odysseia (só relevante quando tipo='dripfy') ──────────
+  execucao                  DmExecucaoDripfy? @default(jmd)
+  odysseia_job_id           String?
+  odysseia_status           String?
+  odysseia_template_id      String?
+  odysseia_receptive_fonte  String?
 
   tenant    Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   canal     DmCanal?     @relation(fields: [canal_id], references: [id], onDelete: SetNull)

@@ -1,7 +1,8 @@
-import { Controller, Get, Patch, Param, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Patch, Param, Post, Res, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { Response } from 'express';
 import { AdminCampanhasJmdService } from './admin-campanhas-jmd.service';
+import { ConfigurarOdysseiaDto } from './dto/configurar-odysseia.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -35,5 +36,23 @@ export class AdminCampanhasJmdController {
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.send(String.fromCharCode(0xFEFF) + csv);
+  }
+
+  @Get('odysseia/templates')
+  @ApiOperation({ summary: '[Master] Lista os templates de WhatsApp cadastrados no painel da Odysseia' })
+  listarTemplatesOdysseia() {
+    return this.service.listarTemplatesOdysseia();
+  }
+
+  @Patch(':id/odysseia')
+  @ApiOperation({ summary: '[Master] Configura a demanda pra ser executada via Odysseia (template + fonte de resposta + agendamento)' })
+  configurarOdysseia(@Param('id') id: string, @Body() dto: ConfigurarOdysseiaDto) {
+    return this.service.configurarOdysseia(id, dto);
+  }
+
+  @Post(':id/disparar-odysseia')
+  @ApiOperation({ summary: '[Master] Dispara a demanda via API da Odysseia (WhatsApp agendado)' })
+  dispararViaOdysseia(@Param('id') id: string) {
+    return this.service.dispararViaOdysseia(id);
   }
 }

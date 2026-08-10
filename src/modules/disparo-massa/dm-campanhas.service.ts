@@ -130,6 +130,9 @@ export class DmCampanhasService implements OnModuleInit {
           total_contatos: totalContatos,
           status: saldoSuficiente ? 'agendada' : 'aguardando_pagamento',
           financeiro_status: saldoSuficiente ? 'pago' : 'pendente',
+          execucao: dto.execucao || 'jmd',
+          odysseia_template_id: dto.odysseia_template_id || null,
+          odysseia_receptive_fonte: dto.odysseia_receptive_fonte || null,
         },
       });
 
@@ -147,7 +150,7 @@ export class DmCampanhasService implements OnModuleInit {
 
       if (dto.salvar_como_modelo && dto.nome_modelo) {
         await tx.dmModeloMensagem.create({
-          data: { tenant_id: tenantId, nome: dto.nome_modelo, texto: dto.mensagem_nucleo || dto.mensagem_texto, link_botao: dto.link_botao || null },
+          data: { tenant_id: tenantId, nome: dto.nome_modelo, texto: dto.mensagem_nucleo || dto.mensagem_texto || '', link_botao: dto.link_botao || null },
         });
       }
 

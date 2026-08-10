@@ -3,7 +3,7 @@ import {
   IsString, IsOptional, IsArray, IsDateString, ValidateNested, IsEnum, ArrayMinSize, IsBoolean,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { DmCampanhaStatus, DmCampanhaPrioridade, DmMidiaTipo } from '@prisma/client';
+import { DmCampanhaStatus, DmCampanhaPrioridade, DmMidiaTipo, DmExecucaoDripfy } from '@prisma/client';
 
 export class ContatoCsvDto {
   @ApiPropertyOptional() @IsOptional() @IsString() nome?: string;
@@ -37,7 +37,9 @@ export class CreateDripifyCampanhaDto {
   @ApiPropertyOptional() @IsOptional() @IsString() canal_id?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() foto_perfil_url?: string;
 
-  @ApiProperty() @IsString() mensagem_texto: string;
+  // Obrigatório só na execução manual (jmd) — quando execucao=odysseia_whatsapp
+  // a mensagem vem de um template já cadastrado na Odysseia, não daqui.
+  @ApiPropertyOptional() @IsOptional() @IsString() mensagem_texto?: string;
   // Só a parte variável ("novidade") da mensagem — usada pra salvar como
   // modelo reutilizável, sem a saudação/rodapé fixos que já vêm em mensagem_texto.
   @ApiPropertyOptional() @IsOptional() @IsString() mensagem_nucleo?: string;
@@ -51,6 +53,11 @@ export class CreateDripifyCampanhaDto {
 
   @ApiPropertyOptional() @IsOptional() @IsDateString() agendado_para?: string;
   @ApiPropertyOptional({ enum: DmCampanhaPrioridade }) @IsOptional() @IsEnum(DmCampanhaPrioridade) prioridade?: DmCampanhaPrioridade;
+
+  // ─── Execução via Odysseia (WhatsApp agendado, automático) ──────────────
+  @ApiPropertyOptional({ enum: DmExecucaoDripfy, default: 'jmd' }) @IsOptional() @IsEnum(DmExecucaoDripfy) execucao?: DmExecucaoDripfy;
+  @ApiPropertyOptional() @IsOptional() @IsString() odysseia_template_id?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() odysseia_receptive_fonte?: string;
 
   @ApiProperty({ type: [ContatoCsvDto] })
   @IsArray()
