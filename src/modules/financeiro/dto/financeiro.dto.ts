@@ -1,4 +1,4 @@
-import { IsNumber, IsOptional, Min } from 'class-validator';
+import { IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Min } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class ComprarCreditosDto {
@@ -13,4 +13,17 @@ export class ComprarCreditosDto {
   @IsOptional()
   @IsNumber()
   valor_total?: number;
+}
+
+export class AjustarCreditosDto {
+  // Positivo = credita (ex: reembolso de contatos com falha no disparo).
+  // Negativo = debita.
+  @ApiProperty()
+  @IsInt()
+  quantidade: number;
+
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  descricao: string;
 }

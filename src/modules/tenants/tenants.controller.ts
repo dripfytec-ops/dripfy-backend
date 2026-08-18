@@ -5,6 +5,7 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { TenantsService } from './tenants.service';
 import { CreateTenantDto, UpdateTenantStatusDto, AtualizarDadosCadastraisDto } from './dto/create-tenant.dto';
+import { AjustarCreditosDto } from '../financeiro/dto/financeiro.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -69,6 +70,12 @@ export class TenantsController {
   @ApiOperation({ summary: '[Master] Extrato (conta corrente) de créditos de um Tenant específico' })
   getExtrato(@Param('id') id: string) {
     return this.financeiroService.getExtrato(id);
+  }
+
+  @Patch(':id/creditos/ajustar')
+  @ApiOperation({ summary: '[Master] Ajusta manualmente o saldo de créditos Dripfy de um Tenant (ex: reembolso de contatos com falha no disparo)' })
+  ajustarCreditos(@Param('id') id: string, @Body() dto: AjustarCreditosDto) {
+    return this.financeiroService.ajustarCreditos(id, dto.quantidade, dto.descricao);
   }
 
   @Get(':id/invoices-pendentes')

@@ -1,7 +1,7 @@
 import { Injectable, Logger, NotFoundException, BadRequestException, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MetaService } from './meta.service';
-import { FinanceiroService } from '../financeiro/financeiro.service';
+import { FinanceiroService, QUANTIDADE_MINIMA_COMPRA } from '../financeiro/financeiro.service';
 import { CreateDmCampanhaDto, PatchDmCampanhaDto, CreateDripifyCampanhaDto } from './dto/dm-campanha.dto';
 import { telefoneVariantes } from '../../common/utils/telefone.util';
 import { DmContato, DmCanal, MessageDirection, MessageStatus, LeadStatus } from '@prisma/client';
@@ -102,8 +102,12 @@ export class DmCampanhasService implements OnModuleInit {
   // painel /admin/demandas-dripfy) — mas os Leads já ficam prontos no Chat
   // desde já, igual ao Disparo Próprio.
   async createDripify(tenantId: string, dto: CreateDripifyCampanhaDto) {
-    const tenant = await this.prisma.tenant.findUniqueOrThrow({ where: { id: tenantId } });
     const totalContatos = dto.contatos.length;
+    if (totalContatos < QUANTIDADE_MINIMA_COMPRA) {
+      throw new BadRequestException(`Mínimo de ${QUANTIDADE_MINIMA_COMPRA} contatos por disparo Dripfy.`);
+    }
+
+    const tenant = await this.prisma.tenant.findUniqueOrThrow({ where: { id: tenantId } });
     // Assume 1 crédito = 1 contato/mensagem — não existe hoje uma taxa de
     // conversão diferente definida em nenhum outro lugar do sistema.
     const saldoSuficiente = tenant.creditos_saldo >= totalContatos;

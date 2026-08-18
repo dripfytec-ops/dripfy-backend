@@ -10,12 +10,12 @@ import { montarPayloadPixEstatico } from '../../common/utils/pix.util';
 // consulta de status, não um nome de evento fixo).
 const EVENTOS_PAGAMENTO_CONFIRMADO = ['PAYMENT_RECEIVED', 'PAYMENT_CONFIRMED'];
 
-// Preço praticado hoje: cobramos R$0,27 por crédito do parceiro; nosso custo
-// de execução via JMD é de R$0,18 — margem de R$0,09/crédito. O preço
+// Preço praticado hoje: cobramos R$0,25 por crédito do parceiro; nosso custo
+// de execução via JMD é de R$0,18 — margem de R$0,07/crédito. O preço
 // nunca vem do cliente (evita fraude), sempre calculado aqui.
-export const PRECO_CREDITO = 0.27;
+export const PRECO_CREDITO = 0.25;
 export const CUSTO_CREDITO_JMD = 0.18;
-export const QUANTIDADE_MINIMA_COMPRA = 2000;
+export const QUANTIDADE_MINIMA_COMPRA = 2500;
 
 @Injectable()
 export class FinanceiroService {
@@ -147,6 +147,29 @@ export class FinanceiroService {
       }),
     ]);
     return { creditos_saldo: saldo.creditos_saldo, valor_credito: PRECO_CREDITO, transacoes };
+  }
+
+  // [Master] Ajuste manual de créditos de um tenant — usado principalmente
+  // pra reembolsar contatos que falharam no disparo Dripfy (cobrados na hora
+  // do upload, mas nem todo contato é enviado com sucesso; a diferença é
+  // ajustada aqui ao final do dia). Quantidade negativa também é permitida
+  // (ex: corrigir um crédito indevido).
+  async ajustarCreditos(tenantId: string, quantidade: number, descricao: string) {
+    if (!quantidade) throw new BadRequestException('Quantidade do ajuste não pode ser zero.');
+    return this.prisma.$transaction(async (tx) => {
+      const tenant = await tx.tenant.update({
+        where: { id: tenantId },
+        data: { creditos_saldo: { increment: quantidade } },
+      });
+      await this.registrarTransacao(tx, {
+        tenantId,
+        tipo: 'ajuste',
+        quantidade,
+        saldoApos: tenant.creditos_saldo,
+        descricao,
+      });
+      return { creditos_saldo: tenant.creditos_saldo };
+    });
   }
 
   // Registra uma transação no ledger e retorna o registro criado. Não mexe
