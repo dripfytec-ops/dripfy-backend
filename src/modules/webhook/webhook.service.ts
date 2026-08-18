@@ -51,6 +51,10 @@ export class WebhookService {
           cpf: data.cpf || telefoneNorm,
           canal_id: canal?.id ?? null,
           status_atual: LeadStatus.balde_geral,
+          // Lead veio de um disparo externo de verdade — sem isso, o filtro
+          // `disparado = true` da esteira geral esconde o lead até a saudação
+          // automática rodar (e nem sempre está configurada).
+          disparado: true,
         },
       });
     }
@@ -225,6 +229,10 @@ export class WebhookService {
             nome: `Contato ${telefone}`,
             telefone,
             iniciado_pelo_cliente: true,
+            // Conversa iniciada pelo cliente já é uma conversa ativa — sem
+            // isso, o filtro `disparado = true` da esteira geral (leads.service.ts)
+            // esconde permanentemente esses leads do painel.
+            disparado: true,
             canal_id: canal?.id ?? null,
             etiquetas: etAtendimento ? { connect: [{ id: etAtendimento.id }] } : undefined,
             last_message_at: new Date(),
