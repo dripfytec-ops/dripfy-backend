@@ -5,6 +5,7 @@ import { DmCanaisService } from '../disparo-massa/dm-canais.service';
 import { MediaService } from '../../common/media/media.service';
 import { telefoneVariantes } from '../../common/utils/telefone.util';
 import { MessageStatus, MessageDirection, LeadStatus } from '@prisma/client';
+import { AtribuicaoLeadsService } from '../leads/atribuicao-leads.service';
 import axios from 'axios';
 
 const MEDIA_TYPES = ['image', 'audio', 'video', 'document', 'sticker'] as const;
@@ -25,6 +26,7 @@ export class WebhookService {
     private chatwootService: ChatwootService,
     private canaisService: DmCanaisService,
     private mediaService: MediaService,
+    private atribuicaoLeads: AtribuicaoLeadsService,
   ) {}
 
   async insertLeadAndFireImmediate(tenantSlug: string, data: { nome: string; telefone: string; cpf?: string }) {
@@ -43,6 +45,11 @@ export class WebhookService {
       where: { tenant_id: tenant.id, cpf: data.cpf || telefoneNorm, canal_id: canal?.id ?? null },
     });
     if (!lead) {
+      // Atribuição automática entre vendedores online (limite diário
+      // configurável por tenant) — só nesse ponto de entrada, disparo
+      // externo. Se ninguém estiver online/com vaga, fica sem vendedor
+      // pra distribuição manual depois.
+      const vendedorId = await this.atribuicaoLeads.atribuirVendedorOnline(tenant.id);
       lead = await this.prisma.lead.create({
         data: {
           tenant_id: tenant.id,
@@ -51,6 +58,7 @@ export class WebhookService {
           cpf: data.cpf || telefoneNorm,
           canal_id: canal?.id ?? null,
           status_atual: LeadStatus.balde_geral,
+          vendedor_id: vendedorId,
           // Lead veio de um disparo externo de verdade — sem isso, o filtro
           // `disparado = true` da esteira geral esconde o lead até a saudação
           // automática rodar (e nem sempre está configurada).

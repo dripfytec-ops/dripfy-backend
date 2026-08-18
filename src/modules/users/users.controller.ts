@@ -44,9 +44,32 @@ export class UsersController {
   @ApiOperation({ summary: 'Atualiza configurações de equipe do tenant' })
   updateConfig(
     @CurrentUser('tenant_id') tenantId: string,
-    @Body() dto: { vendedor_ve_todos_atendimentos?: boolean },
+    @Body() dto: { vendedor_ve_todos_atendimentos?: boolean; limite_leads_dia_vendedor?: number },
   ) {
     return this.usersService.updateConfig(tenantId, dto);
+  }
+
+  @Get('me')
+  @ApiOperation({ summary: 'Dados do usuário logado, incluindo status online' })
+  me(@CurrentUser('id') userId: string) {
+    return this.usersService.me(userId);
+  }
+
+  @Patch('me/online')
+  @ApiOperation({ summary: 'Vendedor liga/desliga seu próprio status online (usado na atribuição automática de leads)' })
+  toggleOnline(@CurrentUser('id') userId: string) {
+    return this.usersService.toggleOnline(userId);
+  }
+
+  @Patch(':id/toggle-online')
+  @Roles(UserRole.admin_master, UserRole.lojista_admin)
+  @ApiOperation({ summary: 'Admin liga/desliga o status online de um vendedor' })
+  toggleOnlineAdmin(
+    @Param('id') id: string,
+    @CurrentUser('tenant_id') tenantId: string,
+    @CurrentUser('role') role: string,
+  ) {
+    return this.usersService.toggleOnlineAdmin(tenantId, id, role);
   }
 
   @Patch(':id/toggle')

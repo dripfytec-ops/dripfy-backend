@@ -133,6 +133,10 @@ model Tenant {
   // false (padrão), só vê os seus + os ainda sem vendedor atribuído.
   vendedor_ve_todos_atendimentos Boolean @default(false)
 
+  // Limite diário de leads que a atribuição automática distribui pra cada
+  // vendedor online (leads de disparo externo). Configurável por tenant.
+  limite_leads_dia_vendedor Int @default(250)
+
   users               User[]
   chatwoot_config     ChatwootConfig?
   leads               Lead[]
@@ -328,6 +332,9 @@ model User {
   password_hash String
   role          UserRole  @default(atendente)
   ativo         Boolean   @default(true)
+  // Vendedor liga/desliga manualmente pelo painel. Usado pela atribuição
+  // automática de leads de disparo externo (só distribui pra quem está online).
+  online        Boolean   @default(false)
   criado_em     DateTime  @default(now())
   atualizado_em DateTime  @updatedAt
 

@@ -70,8 +70,42 @@ export class UsersService {
   async findAll(tenantId: string) {
     return this.prisma.user.findMany({
       where: { tenant_id: tenantId },
-      select: { id: true, nome: true, email: true, role: true, ativo: true, criado_em: true },
+      select: { id: true, nome: true, email: true, role: true, ativo: true, online: true, criado_em: true },
       orderBy: { nome: 'asc' },
+    });
+  }
+
+  async me(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, nome: true, email: true, role: true, online: true },
+    });
+    if (!user) throw new NotFoundException('Usuário não encontrado.');
+    return user;
+  }
+
+  async toggleOnline(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException('Usuário não encontrado.');
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { online: !user.online },
+      select: { id: true, nome: true, online: true },
+    });
+  }
+
+  // Admin também pode ligar/desligar o status online de qualquer vendedor
+  // do tenant — não só o próprio vendedor via toggleOnline.
+  async toggleOnlineAdmin(tenantId: string, userId: string, callerRole: string) {
+    const where = callerRole === UserRole.admin_master
+      ? { id: userId }
+      : { id: userId, tenant_id: tenantId };
+    const user = await this.prisma.user.findFirst({ where });
+    if (!user) throw new NotFoundException('Usuário não encontrado.');
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { online: !user.online },
+      select: { id: true, nome: true, online: true },
     });
   }
 
@@ -127,17 +161,23 @@ export class UsersService {
   async getConfig(tenantId: string) {
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: tenantId },
-      select: { vendedor_ve_todos_atendimentos: true },
+      select: { vendedor_ve_todos_atendimentos: true, limite_leads_dia_vendedor: true },
     });
     if (!tenant) throw new NotFoundException('Tenant não encontrado.');
     return tenant;
   }
 
-  async updateConfig(tenantId: string, dto: { vendedor_ve_todos_atendimentos?: boolean }) {
+  async updateConfig(tenantId: string, dto: { vendedor_ve_todos_atendimentos?: boolean; limite_leads_dia_vendedor?: number }) {
+    if (dto.limite_leads_dia_vendedor !== undefined && dto.limite_leads_dia_vendedor < 1) {
+      throw new ConflictException('Limite diário de leads deve ser maior que zero.');
+    }
     return this.prisma.tenant.update({
       where: { id: tenantId },
-      data: { ...(dto.vendedor_ve_todos_atendimentos !== undefined && { vendedor_ve_todos_atendimentos: dto.vendedor_ve_todos_atendimentos }) },
-      select: { vendedor_ve_todos_atendimentos: true },
+      data: {
+        ...(dto.vendedor_ve_todos_atendimentos !== undefined && { vendedor_ve_todos_atendimentos: dto.vendedor_ve_todos_atendimentos }),
+        ...(dto.limite_leads_dia_vendedor !== undefined && { limite_leads_dia_vendedor: dto.limite_leads_dia_vendedor }),
+      },
+      select: { vendedor_ve_todos_atendimentos: true, limite_leads_dia_vendedor: true },
     });
   }
 }
