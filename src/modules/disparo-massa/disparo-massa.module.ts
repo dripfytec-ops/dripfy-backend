@@ -5,9 +5,10 @@ import { DmCampanhasService } from './dm-campanhas.service';
 import { MetaService } from './meta.service';
 import { MediaModule } from '../../common/media/media.module';
 import { FinanceiroModule } from '../financeiro/financeiro.module';
+import { AtribuicaoLeadsModule } from '../leads/atribuicao-leads.module';
 
 @Module({
-  imports: [MediaModule, FinanceiroModule],
+  imports: [MediaModule, FinanceiroModule, AtribuicaoLeadsModule],
   controllers: [DisparoMassaController],
   providers: [DmCanaisService, DmCampanhasService, MetaService],
   exports: [DmCanaisService, MetaService, DmCampanhasService],

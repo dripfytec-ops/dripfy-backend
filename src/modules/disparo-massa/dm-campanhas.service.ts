@@ -5,6 +5,7 @@ import { FinanceiroService, QUANTIDADE_MINIMA_COMPRA } from '../financeiro/finan
 import { CreateDmCampanhaDto, PatchDmCampanhaDto, CreateDripifyCampanhaDto } from './dto/dm-campanha.dto';
 import { telefoneVariantes } from '../../common/utils/telefone.util';
 import { DmContato, DmCanal, MessageDirection, MessageStatus, LeadStatus } from '@prisma/client';
+import { AtribuicaoLeadsService } from '../leads/atribuicao-leads.service';
 
 const TAMANHO_LOTE_PADRAO = 10;
 const DELAY_MS_PADRAO = 300;
@@ -14,7 +15,12 @@ export class DmCampanhasService implements OnModuleInit {
   private readonly logger = new Logger(DmCampanhasService.name);
   private loopsAtivos = new Set<string>();
 
-  constructor(private prisma: PrismaService, private meta: MetaService, private financeiro: FinanceiroService) {}
+  constructor(
+    private prisma: PrismaService,
+    private meta: MetaService,
+    private financeiro: FinanceiroService,
+    private atribuicaoLeads: AtribuicaoLeadsService,
+  ) {}
 
   async onModuleInit() {
     this.resumirCampanhasAtivas().catch((e) => this.logger.error(`resumirCampanhasAtivas: ${e.message}`));
@@ -91,7 +97,7 @@ export class DmCampanhasService implements OnModuleInit {
       // é efetivamente enviada — assim o Chat já reconhece o contato (nome/CPF
       // preenchidos) mesmo antes do disparo rodar (ex: campanha agendada, ou
       // parada aguardando recarga de créditos).
-      await this.persistirLeadsEmLote(tenantId, dto.contatos, campanha);
+      await this.persistirLeadsEmLote(tenantId, dto.contatos, campanha, false);
     }
 
     return campanha;
@@ -170,7 +176,7 @@ export class DmCampanhasService implements OnModuleInit {
       })),
     });
 
-    await this.persistirLeadsEmLote(tenantId, dto.contatos, campanha);
+    await this.persistirLeadsEmLote(tenantId, dto.contatos, campanha, true);
 
     return campanha;
   }
@@ -181,10 +187,13 @@ export class DmCampanhasService implements OnModuleInit {
 
   // Upsert em lote dos Leads a partir de uma lista de contatos crus (CSV),
   // com concorrência limitada pra não travar a resposta em listas grandes.
+  // `atribuicaoAutomatica` só vale pra Disparo Dripfy (campanhas de disparo
+  // externo) — Disparo Próprio nunca usa a atribuição por vendedor online.
   private async persistirLeadsEmLote(
     tenantId: string,
     contatosCsv: { nome?: string; cpf?: string; telefone: string }[],
     campanha: { id: string; nome: string; vendedor_id?: string | null; canal_id: string | null },
+    atribuicaoAutomatica: boolean,
   ) {
     const contatosNormalizados = contatosCsv.map((c) => ({
       nome: c.nome || null,
@@ -196,8 +205,12 @@ export class DmCampanhasService implements OnModuleInit {
       const lote = contatosNormalizados.slice(i, i + LOTE_UPSERT);
       await Promise.allSettled(
         lote.map((c) =>
-          this.garantirLead(tenantId, c, { id: campanha.id, nome: campanha.nome, vendedor_id: campanha.vendedor_id ?? null, canal_id: campanha.canal_id })
-            .catch((e) => this.logger.error(`Falha ao persistir lead do contato ${c.telefone}: ${e.message}`)),
+          this.garantirLead(
+            tenantId,
+            c,
+            { id: campanha.id, nome: campanha.nome, vendedor_id: campanha.vendedor_id ?? null, canal_id: campanha.canal_id },
+            atribuicaoAutomatica,
+          ).catch((e) => this.logger.error(`Falha ao persistir lead do contato ${c.telefone}: ${e.message}`)),
         ),
       );
     }
@@ -210,12 +223,16 @@ export class DmCampanhasService implements OnModuleInit {
     tenantId: string,
     contato: { nome: string | null; cpf: string | null; telefone: string },
     campanha: { id: string; nome: string; vendedor_id: string | null; canal_id: string | null },
+    atribuicaoAutomatica: boolean,
   ) {
     const lead = await this.prisma.lead.findFirst({
       where: { tenant_id: tenantId, telefone: { in: telefoneVariantes(contato.telefone) }, canal_id: campanha.canal_id },
     });
 
     if (!lead) {
+      // Sem vendedor fixo da campanha: se for Disparo Dripfy, distribui entre
+      // vendedores online (menos leads no dia); senão fica sem vendedor mesmo.
+      const vendedorId = campanha.vendedor_id ?? (atribuicaoAutomatica ? await this.atribuicaoLeads.atribuirVendedorOnline(tenantId) : null);
       await this.prisma.lead.create({
         data: {
           tenant_id: tenantId,
@@ -225,7 +242,7 @@ export class DmCampanhasService implements OnModuleInit {
           canal_id: campanha.canal_id,
           origem_campanha_id: campanha.id,
           origem_campanha_nome: campanha.nome,
-          vendedor_id: campanha.vendedor_id,
+          vendedor_id: vendedorId,
         },
       }).catch(async (e) => {
         // Corrida/duplicidade: CPF já usado por outro lead do tenant nesse
@@ -239,7 +256,7 @@ export class DmCampanhasService implements OnModuleInit {
               canal_id: campanha.canal_id,
               origem_campanha_id: campanha.id,
               origem_campanha_nome: campanha.nome,
-              vendedor_id: campanha.vendedor_id,
+              vendedor_id: vendedorId,
             },
           });
         }
@@ -463,7 +480,10 @@ export class DmCampanhasService implements OnModuleInit {
     wamid: string | null,
   ) {
     const preview = `Template: ${campanha.template_name}`;
-    await this.garantirLead(tenantId, { nome: contato.nome, cpf: contato.cpf, telefone: contato.telefone }, campanha);
+    // Este loop de envio via Meta só roda pro Disparo Próprio (Disparo
+    // Dripfy não passa por aqui — ver comentário em createDripify), então
+    // nunca usa a atribuição automática por vendedor online.
+    await this.garantirLead(tenantId, { nome: contato.nome, cpf: contato.cpf, telefone: contato.telefone }, campanha, false);
 
     const lead = await this.prisma.lead.findFirst({
       where: { tenant_id: tenantId, telefone: { in: telefoneVariantes(contato.telefone) }, canal_id: campanha.canal_id },
