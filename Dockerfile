@@ -17,4 +17,4 @@ ENV NODE_ENV=production
 
 EXPOSE 3001
 
-CMD ["sh", "-c", "echo '=== MIGRANDO ===' && npx prisma migrate deploy; echo '=== INICIANDO NODE ===' && exec node dist/main"]
+CMD ["sh", "-c", "echo '=== MIGRANDO ===' && timeout 30 npx prisma migrate deploy; echo '=== INICIANDO NODE ===' && exec node dist/main"]

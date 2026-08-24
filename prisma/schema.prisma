@@ -4,8 +4,15 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  // Runtime da aplicação usa o Transaction Pooler do Supabase (porta 6543),
+  // que suporta muito mais conexões concorrentes que o Session Pooler
+  // (limite de 15) — essencial pra loops de disparo em massa, que abrem
+  // várias queries em paralelo. `prisma migrate deploy` (rodado no boot do
+  // container) usa directUrl (Session Pooler, porta 5432) porque o
+  // Transaction Pooler não suporta o advisory lock que migrations precisam.
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum UserRole {
